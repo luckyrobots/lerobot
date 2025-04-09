@@ -58,6 +58,7 @@ available_tasks_per_env = {
     ],
     "pusht": ["PushT-v0"],
     "xarm": ["XarmLift-v0"],
+    "luckyworld": ["LuckyWorld-PickandPlace-v0"],
 }
 available_envs = list(available_tasks_per_env.keys())
 
@@ -84,6 +85,9 @@ available_datasets_per_env = {
         "lerobot/xarm_lift_medium_replay_image",
         "lerobot/xarm_push_medium_image",
         "lerobot/xarm_push_medium_replay_image",
+    ],
+    "luckyworld": [
+        "lerobot/luckyworld_pickandplace",
     ],
 }
 
@@ -203,6 +207,7 @@ available_policies_per_env = {
     "xarm": ["tdmpc"],
     "koch_real": ["act_koch_real"],
     "aloha_real": ["act_aloha_real"],
+    "luckyworld": ["diffusion"],
 }
 
 env_task_pairs = [(env, task) for env, tasks in available_tasks_per_env.items() for task in tasks]
