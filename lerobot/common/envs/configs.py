@@ -161,12 +161,12 @@ class XarmEnv(EnvConfig):
 @dataclass
 class LuckyWorldEnv(EnvConfig):
     task: str = "LuckyWorld-PickandPlace-v0"
-    scene: str = "bedroom"
-    robot_type: str = "so100"
+    scene: str = "ArmLevel"
+    robot: str = "so100"
     fps: int = 30
     episode_length: int = 200
     obs_type: str = "pixels_agent_pos"
-    render_mode: str = "rgb_array"
+    render_mode: str = "human"
     features: dict[str, PolicyFeature] = field(
         default_factory=lambda: {
             "action": PolicyFeature(type=FeatureType.ACTION, shape=(6,)),
@@ -176,17 +176,19 @@ class LuckyWorldEnv(EnvConfig):
         default_factory=lambda: {
             "action": ACTION,
             "agent_pos": OBS_STATE,
-            "top": f"{OBS_IMAGE}.top",
-            "pixels/top": f"{OBS_IMAGES}.top",
+            "camera1": f"{OBS_IMAGES}.Camera 1",
+            "camera2": f"{OBS_IMAGES}.Camera 2",
         }
     )
 
     def __post_init__(self):
         if self.obs_type == "pixels":
-            self.features["top"] = PolicyFeature(type=FeatureType.VISUAL, shape=(480, 640, 3))
+            self.features["camera1"] = PolicyFeature(type=FeatureType.VISUAL, shape=(480, 640, 3))
+            self.features["camera2"] = PolicyFeature(type=FeatureType.VISUAL, shape=(480, 640, 3))
         elif self.obs_type == "pixels_agent_pos":
             self.features["agent_pos"] = PolicyFeature(type=FeatureType.STATE, shape=(6,))
-            self.features["pixels/top"] = PolicyFeature(type=FeatureType.VISUAL, shape=(480, 640, 3))
+            self.features["camera1"] = PolicyFeature(type=FeatureType.VISUAL, shape=(480, 640, 3))
+            self.features["camera2"] = PolicyFeature(type=FeatureType.VISUAL, shape=(480, 640, 3))
 
     @property
     def gym_kwargs(self) -> dict:
@@ -194,7 +196,7 @@ class LuckyWorldEnv(EnvConfig):
             "obs_type": self.obs_type,
             "render_mode": self.render_mode,
             "max_episode_steps": self.episode_length,
-            "task": self.task.split("-")[1].lower(),
             "scene": self.scene,
-            "robot_type": self.robot_type,
+            "robot": self.robot,
+            "task": self.task.split("-")[1].lower(),
         }
