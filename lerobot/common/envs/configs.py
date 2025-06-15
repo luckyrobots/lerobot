@@ -166,7 +166,7 @@ class LuckyWorldEnv(EnvConfig):
     fps: int = 30
     episode_length: int = 200
     obs_type: str = "pixels_agent_pos"
-    render_mode: str = "human"
+    render_mode: str = "rgb_array"
     features: dict[str, PolicyFeature] = field(
         default_factory=lambda: {
             "action": PolicyFeature(type=FeatureType.ACTION, shape=(6,)),
@@ -176,8 +176,8 @@ class LuckyWorldEnv(EnvConfig):
         default_factory=lambda: {
             "action": ACTION,
             "agent_pos": OBS_STATE,
-            "camera1": f"{OBS_IMAGES}.Camera 1",
-            "camera2": f"{OBS_IMAGES}.Camera 2",
+            "camera1": f"{OBS_IMAGES}.Camera_1",
+            "camera2": f"{OBS_IMAGES}.Camera_2",
         }
     )
 
