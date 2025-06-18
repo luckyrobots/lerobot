@@ -178,6 +178,14 @@ class LuckyWorldEnv(EnvConfig):
             "camera2": f"{OBS_IMAGES}.Camera_2",
         }
     )
+    features_map: dict[str, str] = field(
+        default_factory=lambda: {
+            "action": ACTION,
+            "agent_pos": OBS_STATE,
+            "camera1": f"{OBS_IMAGES}.Camera_1",
+            "camera2": f"{OBS_IMAGES}.Camera_2",
+        }
+    )
 
     def __post_init__(self):
         if self.obs_type == "pixels":
