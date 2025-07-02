@@ -166,6 +166,7 @@ class LuckyWorldEnv(EnvConfig):
     task: str = "LuckyWorld-PickandPlace-v0"
     scene: str = "ArmLevel"
     robot: str = "so100"
+    debug: bool = False
     fps: int = 5
     episode_length: int = 600
     obs_type: str = "pixels_agent_pos"
