@@ -4,15 +4,6 @@
 MODEL_DIR="outputs/train"
 # List of model subdirectories (edit as needed)
 MODELS=(
-    # "act/010000/pretrained_model"
-    # "act/020000/pretrained_model"
-    # "act/030000/pretrained_model"
-    # "act/040000/pretrained_model"
-    # "act/050000/pretrained_model"
-    # "act/060000/pretrained_model"
-    # "act/071000/pretrained_model"
-    # "act/083000/pretrained_model"
-    # "act/084000/pretrained_model"
     "act/089000/pretrained_model"
 )
 
