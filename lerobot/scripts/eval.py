@@ -168,6 +168,7 @@ def rollout(
 
         # Apply the next action.
         observation, reward, terminated, truncated, info = env.step(action)
+
         if render_callback is not None:
             render_callback(env)
 
@@ -486,7 +487,7 @@ def eval_main(cfg: EvalPipelineConfig):
             env,
             policy,
             cfg.eval.n_episodes,
-            max_episodes_rendered=10,
+            max_episodes_rendered=cfg.eval.n_episodes,
             videos_dir=Path(cfg.output_dir) / "videos",
             start_seed=cfg.seed,
         )
