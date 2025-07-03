@@ -168,7 +168,7 @@ class LuckyWorldEnv(EnvConfig):
     robot: str = "so100"
     debug: bool = False
     fps: int = 5
-    episode_length: int = 600
+    episode_length: int = 500
     obs_type: str = "pixels_agent_pos"
     render_mode: str = "rgb_array"
     features: dict[str, PolicyFeature] = field(
@@ -206,6 +206,7 @@ class LuckyWorldEnv(EnvConfig):
             "scene": self.scene,
             "robot": self.robot,
             "task": self.task.split("-")[1].lower(),
+            "debug": self.debug,
         }
 
 
