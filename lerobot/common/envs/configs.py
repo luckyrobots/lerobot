@@ -169,6 +169,7 @@ class LuckyWorldEnv(EnvConfig):
     debug: bool = False
     fps: int = 5
     episode_length: int = 500
+    autoreset_mode: str = "SameStep"
     obs_type: str = "pixels_agent_pos"
     render_mode: str = "rgb_array"
     features: dict[str, PolicyFeature] = field(
