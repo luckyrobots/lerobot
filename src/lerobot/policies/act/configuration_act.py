@@ -28,7 +28,7 @@ class ACTConfig(PreTrainedConfig):
     Defaults are configured for training on bimanual Aloha tasks like "insertion" or "transfer".
 
     The parameters you will most likely need to change are the ones which depend on the environment / sensors.
-    Those are: `input_shapes` and 'output_shapes`.
+    Those are: `input_shapes` and 'output_shapes'.
 
     Notes on the inputs and outputs:
         - Either:
@@ -105,11 +105,11 @@ class ACTConfig(PreTrainedConfig):
 
     # Architecture.
     # Vision backbone.
-    vision_backbone: str = "resnet18"
-    pretrained_backbone_weights: str | None = "ResNet18_Weights.IMAGENET1K_V1"
+    vision_backbone: str = "convnext_tiny"
+    pretrained_backbone_weights: str | None = "ConvNeXt_Tiny_Weights.IMAGENET1K_V1"
     replace_final_stride_with_dilation: int = False
     # Transformer layers.
-    pre_norm: bool = False
+    pre_norm: bool = True
     dim_model: int = 512
     n_heads: int = 8
     dim_feedforward: int = 3200
@@ -121,29 +121,31 @@ class ACTConfig(PreTrainedConfig):
     n_decoder_layers: int = 1
     # VAE.
     use_vae: bool = True
-    latent_dim: int = 32
-    n_vae_encoder_layers: int = 4
+    latent_dim: int = 16 # 32
+    n_vae_encoder_layers: int = 5 # 4
 
     # Inference.
     # Note: the value used in ACT when temporal ensembling is enabled is 0.01.
-    temporal_ensemble_coeff: float | None = None
+    temporal_ensemble_coeff: float = 0.01 # None = None
 
     # Training and loss computation.
-    dropout: float = 0.1
+    dropout: float = 0.2
     kl_weight: float = 100.0  # Increased from 10.0 as per ACT tuning recommendations
+    kl_warmup_steps: int = 5000  # Linearly ramp KL weight over these many updates
 
     # Training preset
-    optimizer_lr: float = 8e-5  # Scaled up from 1e-5 for larger batch sizes (64 vs 8)
-    optimizer_weight_decay: float = 1e-4
-    optimizer_lr_backbone: float = 8e-5  # Scaled up from 1e-5 for larger batch sizes
+    optimizer_lr: float = 5e-5  # Scaled up from 1e-5 for larger batch sizes (64 vs 8)
+    optimizer_weight_decay: float = 5e-4 # 1e-4
+    optimizer_lr_backbone: float = 2e-5  # Scaled up from 1e-5 for larger batch sizes
 
     def __post_init__(self):
         super().__post_init__()
 
         """Input validation (not exhaustive)."""
-        if not self.vision_backbone.startswith("resnet"):
+        valid_backbone_prefixes = ("resnet", "convnext")
+        if not self.vision_backbone.startswith(valid_backbone_prefixes):
             raise ValueError(
-                f"`vision_backbone` must be one of the ResNet variants. Got {self.vision_backbone}."
+                f"`vision_backbone` must start with one of {valid_backbone_prefixes}. Got {self.vision_backbone}."
             )
         if self.temporal_ensemble_coeff is not None and self.n_action_steps > 1:
             raise NotImplementedError(

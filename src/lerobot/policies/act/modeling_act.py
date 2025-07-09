@@ -74,30 +74,40 @@ class ACTPolicy(PreTrainedPolicy):
 
         self.model = ACT(config)
 
+        # Step counter for KL warm-up
+        self.register_buffer("_update_step", torch.zeros(1, dtype=torch.long), persistent=False)
+
         if config.temporal_ensemble_coeff is not None:
             self.temporal_ensembler = ACTTemporalEnsembler(config.temporal_ensemble_coeff, config.chunk_size)
 
         self.reset()
 
     def get_optim_params(self) -> dict:
-        # TODO(aliberts, rcadene): As of now, lr_backbone == lr
-        # Should we remove this and just `return self.parameters()`?
+        # Main parameters (excluding backbone & VAE)
+        main_params = [
+            p
+            for n, p in self.named_parameters()
+            if not n.startswith("model.backbones")
+            and not n.startswith("model.vae_encoder")
+            and "vae_encoder_" not in n
+            and p.requires_grad
+        ]
+
+        # VAE-specific params (encoder and projections)
+        vae_params = [
+            p
+            for n, p in self.named_parameters()
+            if (n.startswith("model.vae_encoder") or "vae_encoder_" in n) and p.requires_grad
+        ]
+
+        backbone_params = [
+            p for n, p in self.named_parameters() if n.startswith("model.backbones") and p.requires_grad
+        ]
+
         return [
-            {
-                "params": [
-                    p
-                    for n, p in self.named_parameters()
-                    if not n.startswith("model.backbones") and p.requires_grad
-                ]
-            },
-            {
-                "params": [
-                    p
-                    for n, p in self.named_parameters()
-                    if n.startswith("model.backbones") and p.requires_grad
-                ],
-                "lr": self.config.optimizer_lr_backbone,
-            },
+            {"params": main_params},
+            {"params": backbone_params, "lr": self.config.optimizer_lr_backbone},
+            {"params": vae_params, "lr": self.config.optimizer_lr * 0.2},  # 5× lower LR
         ]
 
     def reset(self):
@@ -162,15 +172,25 @@ class ACTPolicy(PreTrainedPolicy):
 
         loss_dict = {"l1_loss": l1_loss.item()}
         if self.config.use_vae:
+            # Increment update step
+            self._update_step += 1
+
+            # Effective KL weight with linear warm-up
+            warmup_steps = max(1, self.config.kl_warmup_steps)
+            kl_scale = min(1.0, float(self._update_step.item()) / warmup_steps)
+
+            # Clamp mu and log_sigma to prevent NaNs/instability
+            mu_hat_clamped = torch.clamp(mu_hat, min=-7.0, max=7.0)
+            log_sigma_x2_hat_clamped = torch.clamp(log_sigma_x2_hat, min=-7.0, max=7.0)
             # Calculate Dₖₗ(latent_pdf || standard_normal). Note: After computing the KL-divergence for
             # each dimension independently, we sum over the latent dimension to get the total
             # KL-divergence per batch element, then take the mean over the batch.
             # (See App. B of https://huggingface.co/papers/1312.6114 for more details).
             mean_kld = (
-                (-0.5 * (1 + log_sigma_x2_hat - mu_hat.pow(2) - (log_sigma_x2_hat).exp())).sum(-1).mean()
+                (-0.5 * (1 + log_sigma_x2_hat_clamped - mu_hat_clamped.pow(2) - log_sigma_x2_hat_clamped.exp())).sum(-1).mean()
             )
             loss_dict["kld_loss"] = mean_kld.item()
-            loss = l1_loss + mean_kld * self.config.kl_weight
+            loss = l1_loss + mean_kld * self.config.kl_weight * kl_scale
         else:
             loss = l1_loss
 
@@ -338,23 +358,73 @@ class ACT(nn.Module):
         if self.config.image_features:
             # Create a helper function to build a backbone
             def create_backbone():
-                backbone_model = getattr(torchvision.models, config.vision_backbone)(
-                    replace_stride_with_dilation=[False, False, config.replace_final_stride_with_dilation],
-                    weights=config.pretrained_backbone_weights,
-                    norm_layer=FrozenBatchNorm2d,
-                )
-                # Note: The assumption here is that we are using a ResNet model (and hence layer4 is the final
-                # feature map).
-                # Note: The forward method of this returns a dict: {"feature_map": output}.
-                return IntermediateLayerGetter(backbone_model, return_layers={"layer4": "feature_map"})
+                """Factory that returns a torchvision backbone wrapped inside an ``IntermediateLayerGetter`` so
+                that the forward call yields a dict with a single key ``feature_map``.
+
+                Supported backbones
+                ------------------
+                1. ResNet family  – original ACT default.
+                2. ConvNeXt family – modernized replacement (this patch) .
+
+                Raising a ``ValueError`` for anything else ensures we fail fast if a user tries an unsupported
+                backbone instead of silently mis-behaving.
+                """
+
+                backbone_name = config.vision_backbone
+
+                if backbone_name.startswith("resnet"):
+                    # ResNet keeps identical behaviour to the previous implementation.
+                    backbone_model = getattr(torchvision.models, backbone_name)(
+                        replace_stride_with_dilation=[
+                            False,
+                            False,
+                            config.replace_final_stride_with_dilation,
+                        ],
+                        weights=config.pretrained_backbone_weights,
+                        norm_layer=FrozenBatchNorm2d,
+                    )
+                    return IntermediateLayerGetter(backbone_model, return_layers={"layer4": "feature_map"})
+
+                elif backbone_name.startswith("convnext"):
+                    # ConvNeXt models use LayerNorm internally and do **not** accept ``replace_stride_with_dilation``.
+                    backbone_model = getattr(torchvision.models, backbone_name)(
+                        weights=config.pretrained_backbone_weights,
+                    )
+                    # The last convolutional stage is exposed via ``features``; grab that.
+                    return IntermediateLayerGetter(backbone_model, return_layers={"features": "feature_map"})
+
+                else:
+                    raise ValueError(
+                        f"Unsupported vision_backbone '{backbone_name}'. Currently supported: ResNet, ConvNeXt."
+                    )
 
             # Create separate backbones for each camera for better multi-camera performance
             self.backbones = nn.ModuleList([create_backbone() for _ in self.config.image_features])
 
-            # Keep a reference backbone for getting the feature dimensions
+            # Keep a reference backbone for querying the output channel dimension of the final feature map.
             reference_backbone = getattr(torchvision.models, config.vision_backbone)(
                 weights=config.pretrained_backbone_weights
             )
+
+            # Infer the number of output channels of the backbone's last convolutional stage.
+            if hasattr(reference_backbone, "fc") and isinstance(reference_backbone.fc, nn.Linear):
+                # ResNet-style architectures.
+                backbone_out_channels = reference_backbone.fc.in_features
+            elif hasattr(reference_backbone, "classifier"):
+                # ConvNeXt-style architectures expose the channel dimension inside the classifier.
+                backbone_out_channels = None
+                for layer in reference_backbone.classifier:
+                    if isinstance(layer, nn.Linear):
+                        backbone_out_channels = layer.in_features
+                        break
+                if backbone_out_channels is None:
+                    raise RuntimeError(
+                        "Unable to infer ConvNeXt output channels. Unexpected classifier structure."
+                    )
+            else:
+                raise RuntimeError(
+                    "Unable to infer backbone output channels – unsupported architecture or unexpected structure."
+                )
 
         # Transformer (acts as VAE decoder when training with the variational objective).
         self.encoder = ACTEncoder(config)
@@ -373,7 +443,7 @@ class ACT(nn.Module):
         self.encoder_latent_input_proj = nn.Linear(config.latent_dim, config.dim_model)
         if self.config.image_features:
             self.encoder_img_feat_input_proj = nn.Conv2d(
-                reference_backbone.fc.in_features, config.dim_model, kernel_size=1
+                backbone_out_channels, config.dim_model, kernel_size=1
             )
         # Transformer encoder positional embeddings.
         n_1d_tokens = 1  # for the latent
@@ -450,25 +520,36 @@ class ACT(nn.Module):
             # Note: detach() shouldn't be necessary but leaving it the same as the original code just in case.
             pos_embed = self.vae_encoder_pos_enc.clone().detach()  # (1, S+2, D)
 
-            # Prepare key padding mask for the transformer encoder. We have 1 or 2 extra tokens at the start of the
-            # sequence depending whether we use the input states or not (cls and robot state)
-            # False means not a padding token.
+            # Get device from any available tensor in the batch
+            if "observation.state" in batch:
+                device = batch["observation.state"].device
+            elif "observation.images" in batch:
+                device = batch["observation.images"][0].device
+            elif "observation.environment_state" in batch:
+                device = batch["observation.environment_state"].device
+            else:
+                device = batch["action"].device
+            
             cls_joint_is_pad = torch.full(
                 (batch_size, 2 if self.config.robot_state_feature else 1),
                 False,
-                device=batch["observation.state"].device,
+                device=device,
             )
             key_padding_mask = torch.cat(
                 [cls_joint_is_pad, batch["action_is_pad"]], axis=1
             )  # (bs, seq+1 or 2)
 
-            # Forward pass through VAE encoder to get the latent PDF parameters.
-            cls_token_out = self.vae_encoder(
-                vae_encoder_input.permute(1, 0, 2),
-                pos_embed=pos_embed.permute(1, 0, 2),
-                key_padding_mask=key_padding_mask,
-            )[0]  # select the class token, with shape (B, D)
-            latent_pdf_params = self.vae_encoder_latent_output_proj(cls_token_out)
+            # Forward pass through VAE encoder to get the latent PDF parameters (run in full precision to
+            # avoid mixed-precision overflow leading to NaNs).
+            with torch.cuda.amp.autocast(enabled=False):
+                cls_token_out = self.vae_encoder(
+                    vae_encoder_input.permute(1, 0, 2).float(),
+                    pos_embed=pos_embed.permute(1, 0, 2).float(),
+                    key_padding_mask=key_padding_mask,
+                )[0]  # select class token (B, D)
+                latent_pdf_params = self.vae_encoder_latent_output_proj(cls_token_out)
+            # Cast back to original dtype to keep downstream computation consistent
+            latent_pdf_params = latent_pdf_params.to(vae_encoder_input.dtype)
             mu = latent_pdf_params[:, : self.config.latent_dim]
             # This is 2log(sigma). Done this way to match the original implementation.
             log_sigma_x2 = latent_pdf_params[:, self.config.latent_dim :]
@@ -478,10 +559,16 @@ class ACT(nn.Module):
         else:
             # When not using the VAE encoder, we set the latent to be all zeros.
             mu = log_sigma_x2 = None
+            # Get device from any available tensor in the batch
+            if "observation.state" in batch:
+                device = batch["observation.state"].device
+            elif "observation.images" in batch:
+                device = batch["observation.images"][0].device
+            else:
+                device = batch["observation.environment_state"].device
+            
             # TODO(rcadene, alexander-soare): remove call to `.to` to speedup forward ; precompute and use buffer
-            latent_sample = torch.zeros([batch_size, self.config.latent_dim], dtype=torch.float32).to(
-                batch["observation.state"].device
-            )
+            latent_sample = torch.zeros([batch_size, self.config.latent_dim], dtype=torch.float32).to(device)
 
         # Prepare transformer encoder inputs.
         encoder_in_tokens = [self.encoder_latent_input_proj(latent_sample)]

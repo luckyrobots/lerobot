@@ -70,10 +70,42 @@ def update_policy(
     with torch.autocast(device_type=device.type) if use_amp else nullcontext():
         loss, output_dict = policy.forward(batch)
         # TODO(rcadene): policy.unnormalize_outputs(out_dict)
+
+    # NaN/Inf check for loss
+    if not torch.isfinite(loss):
+        logging.warning("NaN or Inf detected in loss. Skipping optimizer step and zeroing gradients.")
+        optimizer.zero_grad()
+        grad_scaler.update()
+        train_metrics.loss = float('nan')
+        train_metrics.grad_norm = float('nan')
+        train_metrics.lr = optimizer.param_groups[0]["lr"]
+        train_metrics.update_s = time.perf_counter() - start_time
+        return train_metrics, output_dict
+
     grad_scaler.scale(loss).backward()
 
     # Unscale the gradient of the optimizer's assigned params in-place **prior to gradient clipping**.
     grad_scaler.unscale_(optimizer)
+
+    # Clip by value to suppress outlier gradients before norm clipping
+    torch.nn.utils.clip_grad_value_(policy.parameters(), 1.0)
+
+    # Check for NaN/Inf in gradients
+    nan_grad = False
+    for name, param in policy.named_parameters():
+        if param.grad is not None and not torch.all(torch.isfinite(param.grad)):
+            logging.warning(f"NaN or Inf detected in gradient: {name}. Skipping optimizer step and zeroing gradients.")
+            nan_grad = True
+            break
+
+    if nan_grad:
+        optimizer.zero_grad()
+        grad_scaler.update()
+        train_metrics.loss = loss.item()
+        train_metrics.grad_norm = float('nan')
+        train_metrics.lr = optimizer.param_groups[0]["lr"]
+        train_metrics.update_s = time.perf_counter() - start_time
+        return train_metrics, output_dict
 
     grad_norm = torch.nn.utils.clip_grad_norm_(
         policy.parameters(),

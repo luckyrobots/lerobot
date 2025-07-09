@@ -141,7 +141,7 @@ def decode_video_frames_torchvision(
     dist = torch.cdist(query_ts[:, None], loaded_ts[:, None], p=1)
     min_, argmin_ = dist.min(1)
 
-    is_within_tol = min_ < tolerance_s
+    is_within_tol = min_ <= tolerance_s
     assert is_within_tol.all(), (
         f"One or several query timestamps unexpectedly violate the tolerance ({min_[~is_within_tol]} > {tolerance_s=})."
         "It means that the closest frame that can be loaded from the video is too far away in time."
@@ -197,9 +197,13 @@ def decode_video_frames_torchcodec(
     # get metadata for frame information
     metadata = decoder.metadata
     average_fps = metadata.average_fps
+    num_frames = metadata.num_frames
 
     # convert timestamps to frame indices
     frame_indices = [round(ts * average_fps) for ts in timestamps]
+    
+    # Clamp frame indices to valid range [0, num_frames-1] to prevent out-of-bounds errors
+    frame_indices = [max(0, min(idx, num_frames - 1)) for idx in frame_indices]
 
     # retrieve frames based on indices
     frames_batch = decoder.get_frames_at(indices=frame_indices)
@@ -217,7 +221,7 @@ def decode_video_frames_torchcodec(
     dist = torch.cdist(query_ts[:, None], loaded_ts[:, None], p=1)
     min_, argmin_ = dist.min(1)
 
-    is_within_tol = min_ < tolerance_s
+    is_within_tol = min_ <= tolerance_s
     assert is_within_tol.all(), (
         f"One or several query timestamps unexpectedly violate the tolerance ({min_[~is_within_tol]} > {tolerance_s=})."
         "It means that the closest frame that can be loaded from the video is too far away in time."
@@ -299,7 +303,7 @@ def encode_video_frames(
 
     # Set logging level
     if log_level is not None:
-        # "While less efficient, it is generally preferable to modify logging with Python’s logging"
+        # "While less efficient, it is generally preferable to modify logging with Python's logging"
         logging.getLogger("libav").setLevel(log_level)
 
     # Create and open output file (overwrite by default)
