@@ -92,8 +92,8 @@ class ACTConfig(PreTrainedConfig):
 
     # Input / output structure.
     n_obs_steps: int = 1
-    chunk_size: int = 100
-    n_action_steps: int = 100
+    chunk_size: int = 5  # Updated for 5Hz inference: 5 actions = 1 second planning horizon
+    n_action_steps: int = 1  # Execute 1 action per policy call for maximum responsiveness
 
     normalization_mapping: dict[str, NormalizationMode] = field(
         default_factory=lambda: {
@@ -130,12 +130,12 @@ class ACTConfig(PreTrainedConfig):
 
     # Training and loss computation.
     dropout: float = 0.1
-    kl_weight: float = 10.0
+    kl_weight: float = 100.0  # Increased from 10.0 as per ACT tuning recommendations
 
     # Training preset
-    optimizer_lr: float = 1e-5
+    optimizer_lr: float = 8e-5  # Scaled up from 1e-5 for larger batch sizes (64 vs 8)
     optimizer_weight_decay: float = 1e-4
-    optimizer_lr_backbone: float = 1e-5
+    optimizer_lr_backbone: float = 8e-5  # Scaled up from 1e-5 for larger batch sizes
 
     def __post_init__(self):
         super().__post_init__()

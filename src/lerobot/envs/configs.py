@@ -160,6 +160,56 @@ class XarmEnv(EnvConfig):
         }
 
 
+@EnvConfig.register_subclass("luckyworld")
+@dataclass
+class LuckyWorldEnv(EnvConfig):
+    task: str = "LuckyWorld-PickandPlace-v0"
+    scene: str = "ArmLevel"
+    robot: str = "so100"
+    debug: bool = False
+    fps: int = 5
+    episode_length: int = 500
+    obs_type: str = "pixels_agent_pos"
+    render_mode: str = "rgb_array"
+    features: dict[str, PolicyFeature] = field(
+        default_factory=lambda: {
+            "action": PolicyFeature(type=FeatureType.ACTION, shape=(6,)),
+            "agent_pos": OBS_STATE,
+            "camera1": f"{OBS_IMAGES}.Camera_1",
+            "camera2": f"{OBS_IMAGES}.Camera_2",
+        }
+    )
+    features_map: dict[str, str] = field(
+        default_factory=lambda: {
+            "action": ACTION,
+            "agent_pos": OBS_STATE,
+            "camera1": f"{OBS_IMAGES}.Camera_1",
+            "camera2": f"{OBS_IMAGES}.Camera_2",
+        }
+    )
+
+    def __post_init__(self):
+        if self.obs_type == "pixels":
+            self.features["camera1"] = PolicyFeature(type=FeatureType.VISUAL, shape=(480, 640, 3))
+            self.features["camera2"] = PolicyFeature(type=FeatureType.VISUAL, shape=(480, 640, 3))
+        elif self.obs_type == "pixels_agent_pos":
+            self.features["agent_pos"] = PolicyFeature(type=FeatureType.STATE, shape=(6,))
+            self.features["camera1"] = PolicyFeature(type=FeatureType.VISUAL, shape=(480, 640, 3))
+            self.features["camera2"] = PolicyFeature(type=FeatureType.VISUAL, shape=(480, 640, 3))
+
+    @property
+    def gym_kwargs(self) -> dict:
+        return {
+            "obs_type": self.obs_type,
+            "render_mode": self.render_mode,
+            "max_episode_steps": self.episode_length,
+            "scene": self.scene,
+            "robot": self.robot,
+            "task": self.task.split("-")[1].lower(),
+            "debug": self.debug,
+        }
+
+
 @dataclass
 class VideoRecordConfig:
     """Configuration for video recording in ManiSkill environments."""
