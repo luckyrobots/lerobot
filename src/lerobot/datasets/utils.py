@@ -487,7 +487,13 @@ def create_empty_dataset_info(
     features: dict,
     use_videos: bool,
     robot_type: str | None = None,
+    video_extension: str = "mp4",
 ) -> dict:
+    # Construct default video path template with configurable extension (mp4 by default for backward compatibility)
+    video_path_template = (
+        f"videos/chunk-{{episode_chunk:03d}}/{{video_key}}/episode_{{episode_index:06d}}.{video_extension}"
+    )
+
     return {
         "codebase_version": codebase_version,
         "robot_type": robot_type,
@@ -500,7 +506,7 @@ def create_empty_dataset_info(
         "fps": fps,
         "splits": {},
         "data_path": DEFAULT_PARQUET_PATH,
-        "video_path": DEFAULT_VIDEO_PATH if use_videos else None,
+        "video_path": video_path_template if use_videos else None,
         "features": features,
     }
 

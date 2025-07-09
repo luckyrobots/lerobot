@@ -307,6 +307,7 @@ class LeRobotDatasetMetadata:
         robot_type: str | None = None,
         root: str | Path | None = None,
         use_videos: bool = True,
+        video_extension: str = "mp4",
     ) -> "LeRobotDatasetMetadata":
         """Creates metadata for a LeRobotDataset."""
         obj = cls.__new__(cls)
@@ -321,7 +322,14 @@ class LeRobotDatasetMetadata:
 
         obj.tasks, obj.task_to_task_index = {}, {}
         obj.episodes_stats, obj.stats, obj.episodes = {}, {}, {}
-        obj.info = create_empty_dataset_info(CODEBASE_VERSION, fps, features, use_videos, robot_type)
+        obj.info = create_empty_dataset_info(
+            CODEBASE_VERSION,
+            fps,
+            features,
+            use_videos,
+            robot_type,
+            video_extension=video_extension,
+        )
         if len(obj.video_keys) > 0 and not use_videos:
             raise ValueError()
         write_json(obj.info, obj.root / INFO_PATH)
@@ -342,6 +350,7 @@ class LeRobotDataset(torch.utils.data.Dataset):
         force_cache_sync: bool = False,
         download_videos: bool = True,
         video_backend: str | None = None,
+        video_extension: str = "mp4",
     ):
         """
         2 modes are available for instantiating this class, depending on 2 different use cases:
@@ -868,7 +877,8 @@ class LeRobotDataset(torch.utils.data.Dataset):
             self.tolerance_s,
         )
 
-        video_files = list(self.root.rglob("*.mp4"))
+        # Support both .mp4 and .mkv video formats
+        video_files = list(self.root.rglob("*.mp4")) + list(self.root.rglob("*.mkv"))
         assert len(video_files) == self.num_episodes * len(self.meta.video_keys)
 
         parquet_files = list(self.root.rglob("*.parquet"))
@@ -972,6 +982,7 @@ class LeRobotDataset(torch.utils.data.Dataset):
         image_writer_processes: int = 0,
         image_writer_threads: int = 0,
         video_backend: str | None = None,
+        video_extension: str = "mp4",
     ) -> "LeRobotDataset":
         """Create a LeRobot Dataset from scratch in order to record data."""
         obj = cls.__new__(cls)
@@ -982,6 +993,7 @@ class LeRobotDataset(torch.utils.data.Dataset):
             features=features,
             root=root,
             use_videos=use_videos,
+            video_extension=video_extension,
         )
         obj.repo_id = obj.meta.repo_id
         obj.root = obj.meta.root

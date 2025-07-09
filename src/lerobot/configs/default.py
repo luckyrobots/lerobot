@@ -37,6 +37,8 @@ class DatasetConfig:
     revision: str | None = None
     use_imagenet_stats: bool = True
     video_backend: str = field(default_factory=get_safe_default_codec)
+    # Allowed time deviation when matching requested timestamps to decoded frames.
+    tolerance_s: float = 1e-3  # relaxed from default 1e-4 to accommodate mkv rounding
 
 
 @dataclass
