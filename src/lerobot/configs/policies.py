@@ -144,13 +144,17 @@ class PreTrainedConfig(draccus.ChoiceRegistry, HubMixin, abc.ABC):
         with open(save_directory / CONFIG_NAME, "w") as f, draccus.config_type("json"):
             draccus.dump(self, f, indent=4)
 
+    # ---------------------------------------------------------------------------
+    # Loading helpers
+    # ---------------------------------------------------------------------------
+
     @classmethod
     def from_pretrained(
         cls: Type[T],
         pretrained_name_or_path: str | Path,
         *,
         force_download: bool = False,
-        resume_download: bool = None,
+        resume_download: bool | None = None,
         proxies: dict | None = None,
         token: str | bool | None = None,
         cache_dir: str | Path | None = None,
@@ -158,13 +162,19 @@ class PreTrainedConfig(draccus.ChoiceRegistry, HubMixin, abc.ABC):
         revision: str | None = None,
         **policy_kwargs,
     ) -> T:
+        """Load a saved PreTrainedConfig from a local folder or the Hugging Face Hub."""
+
         model_id = str(pretrained_name_or_path)
         config_file: str | None = None
+
+        # 1) Local directory path
         if Path(model_id).is_dir():
             if CONFIG_NAME in os.listdir(model_id):
                 config_file = os.path.join(model_id, CONFIG_NAME)
             else:
-                print(f"{CONFIG_NAME} not found in {Path(model_id).resolve()}")
+                raise FileNotFoundError(f"{CONFIG_NAME} not found in {Path(model_id).resolve()}")
+
+        # 2) Hugging Face Hub repository
         else:
             try:
                 config_file = hf_hub_download(
@@ -183,8 +193,25 @@ class PreTrainedConfig(draccus.ChoiceRegistry, HubMixin, abc.ABC):
                     f"{CONFIG_NAME} not found on the HuggingFace Hub in {model_id}"
                 ) from e
 
-        # HACK: this is very ugly, ideally we'd like to be able to do that natively with draccus
-        # something like --policy.path (in addition to --policy.type)
+        # Parse the config with draccus, applying possible CLI overrides
         cli_overrides = policy_kwargs.pop("cli_overrides", [])
         with draccus.config_type("json"):
             return draccus.parse(cls, config_file, args=cli_overrides)
+
+# -----------------------------------------------------------------------------
+# Import optional policy configs so that they are registered with ChoiceRegistry
+# before CLI parsing (draccus) collects available choices.
+# -----------------------------------------------------------------------------
+
+try:
+    # Side-effect import to register LuckyACTConfig under choice name "lucky_act".
+    # NOTE: importing LuckyACTConfig here can create a circular import because LuckyACTConfig
+    # itself depends on ACTConfig → PreTrainedConfig (this module).  We therefore postpone the
+    # registration to runtime: the class will be imported by user code (or tests) as soon as
+    # `lerobot.policies.lucky_act` is referenced, and registration happens there via the
+    # `@PreTrainedConfig.register_subclass` decorator.  Doing nothing here avoids the
+    # circular-import crash while keeping normal behaviour.
+    pass  # defer import to avoid circular dependency
+except ModuleNotFoundError:
+    # Lucky-ACT is optional; ignore if code not present.
+    pass

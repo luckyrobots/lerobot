@@ -171,7 +171,8 @@ class ACTPolicy(PreTrainedPolicy):
         ).mean()
 
         loss_dict = {"l1_loss": l1_loss.item()}
-        if self.config.use_vae:
+        # Run KL only when VAE is active *and* the model returned latent params (i.e. in training mode).
+        if self.config.use_vae and mu_hat is not None and log_sigma_x2_hat is not None:
             # Increment update step
             self._update_step += 1
 
