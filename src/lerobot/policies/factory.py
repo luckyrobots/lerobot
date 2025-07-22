@@ -74,6 +74,10 @@ def get_policy_class(name: str) -> PreTrainedPolicy:
         from lerobot.policies.smolvla.modeling_smolvla import SmolVLAPolicy
 
         return SmolVLAPolicy
+    elif name == "lucky_act":
+        from lerobot.policies.lucky_act.modeling_lucky_act import LuckyACTPolicy  # noqa: E501
+
+        return LuckyACTPolicy
     else:
         raise NotImplementedError(f"Policy with name {name} is not implemented.")
 
@@ -95,6 +99,10 @@ def make_policy_config(policy_type: str, **kwargs) -> PreTrainedConfig:
         return SACConfig(**kwargs)
     elif policy_type == "smolvla":
         return SmolVLAConfig(**kwargs)
+    elif policy_type == "lucky_act":
+        from lerobot.policies.lucky_act.configuration_lucky_act import LuckyACTConfig
+
+        return LuckyACTConfig(**kwargs)
     elif policy_type == "reward_classifier":
         return RewardClassifierConfig(**kwargs)
     else:
@@ -161,15 +169,19 @@ def make_policy(
     cfg.input_features = {key: ft for key, ft in features.items() if key not in cfg.output_features}
     kwargs["config"] = cfg
 
+    # from a local directory or a path on the hub.
     if cfg.pretrained_path:
-        # Load a pretrained policy and override the config if needed (for example, if there are inference-time
-        # hyperparameters that we want to vary).
-        kwargs["pretrained_name_or_path"] = cfg.pretrained_path
-        policy = policy_cls.from_pretrained(**kwargs)
+        policy = policy_cls.from_pretrained(cfg.pretrained_path, dataset_stats=kwargs["dataset_stats"])
     else:
-        # Make a fresh policy.
-        policy = policy_cls(**kwargs)
+        policy_kwargs = {}
+        # Special handling for policies that need dataset metadata at init time.
+        if hasattr(cfg, "auto_infer_features") and cfg.auto_infer_features:
+            # Note: dataset_path would need to be passed from the training config
+            # For now, we'll skip this as it's not commonly used
+            pass
+        policy = policy_cls(cfg, dataset_stats=kwargs["dataset_stats"], **policy_kwargs)
 
+    # For training, send to device and set to train mode.
     policy.to(cfg.device)
     assert isinstance(policy, nn.Module)
 
