@@ -477,7 +477,11 @@ class PI0FAST(nn.Module):
                 param.data = param.data.to(dtype=torch_precision)
         self.set_requires_grad()
         self.image_keys = self.config.image_features.keys()
-        self.ignore_index = self.pi0_paligemma.config.ignore_index
+        # Some versions of `transformers` PaligemmaConfig (≤ 4.53) don’t define
+        # `ignore_index`.  We gracefully fall back to the conventional value
+        # used in CrossEntropyLoss (-100) when it is absent so that training
+        # can proceed irrespective of the library version.
+        self.ignore_index = getattr(self.pi0_paligemma.config, "ignore_index", -100)
         self.padding_side = self.config.padding_side
 
     def set_requires_grad(self):
@@ -492,7 +496,25 @@ class PI0FAST(nn.Module):
                     params.requires_grad = False
 
     def embed_tokens(self, tokens: torch.Tensor):
-        return self.pi0_paligemma.language_model.model.embed_tokens(tokens)
+        """Return the embedding vectors for *tokens*.
+
+        The internal structure of the language-model component changed
+        between early Pi/Paligemma checkpoints and recent versions of
+        🤗 Transformers: in newer releases the embedding matrix is exposed
+        directly as ``GemmaModel.embed_tokens`` whereas older releases
+        had an extra ``.model`` sub-module.  We check for both layouts so
+        that the code works regardless of the library version.
+        """
+        lm = self.pi0_paligemma.language_model  # GemmaModel
+        if hasattr(lm, "model") and hasattr(lm.model, "embed_tokens"):
+            return lm.model.embed_tokens(tokens)
+        elif hasattr(lm, "embed_tokens"):
+            return lm.embed_tokens(tokens)
+        else:
+            raise AttributeError(
+                "Cannot locate embed_tokens in Paligemma language model;"
+                " please check transformers version compatibility."
+            )
 
     def prepare_inputs_for_generation(self, *args, **kwargs):
         return self.pi0_paligemma.prepare_inputs_for_generation(*args, **kwargs)
