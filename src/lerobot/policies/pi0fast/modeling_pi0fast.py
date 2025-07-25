@@ -46,6 +46,9 @@ policy = PI0FASTPolicy.from_pretrained("lerobot/pi0fast_base")
 from collections import deque
 from functools import partial
 
+# AdaLN import
+from lerobot.policies.adaptive_layer_norm import AdaLayerNorm
+
 import numpy as np
 import torch
 import torch.nn.functional as F  # noqa: N812
@@ -155,6 +158,22 @@ class PI0FASTPolicy(PreTrainedPolicy):
 
         self.language_tokenizer = AutoProcessor.from_pretrained("google/paligemma-3b-pt-224")
         self.model = PI0FAST(config)
+
+        # ---------- AdaLN (minimal) ----------
+        ctx_dim = config.max_state_dim + config.max_action_dim
+        hidden_dim = config.proj_width
+        self.adaln = AdaLayerNorm(hidden_dim, ctx_dim)
+
+        # --------- Freeze backbone parameters ---------
+        for name, param in self.named_parameters():
+            if not name.startswith("adaln"):
+                param.requires_grad = False
+
+        # --------- Store initial weights for L2 regularisation ---------
+        self._trainable_names = [n for n, p in self.named_parameters() if p.requires_grad]
+        self._initial_params = {n: p.clone().detach() for n, p in self.named_parameters() if p.requires_grad}
+        # strength of L2 pull-back; can be exposed via config later
+        self._l2_lambda = 1e-3
 
         self.reset()
 
@@ -702,6 +721,14 @@ class PI0FAST(nn.Module):
             padded_outs["token_type_ids"],
             padding_side=self.padding_side,
         )
+
+        # ---------- Apply AdaLN adaptation ----------
+        # Build simple context from mean state & action (flattened).
+        state_ctx = batch[OBS_STATE].reshape(batch[OBS_STATE].shape[0], -1).mean(dim=1)
+        action_ctx = batch[ACTION].reshape(batch[ACTION].shape[0], -1).mean(dim=1)
+        ctx = torch.cat([state_ctx, action_ctx], dim=-1)
+        embs = self.adaln(embs, ctx)
+
         position_ids = torch.cumsum(pad_masks, dim=1) - 1
         token_type_ids = token_type_ids.to(dtype=torch.int64)
         past_seen_tokens = 0
@@ -743,6 +770,14 @@ class PI0FAST(nn.Module):
 
         # Compute final loss
         loss = token_loss.sum() / torch.clamp(loss_mask.sum(), min=1)
+
+        # --------- L2 regularisation toward pretrained weights ---------
+        if self.training and self._l2_lambda > 0:
+            reg = 0.0
+            for n in self._trainable_names:
+                param = dict(self.named_parameters())[n]
+                reg = reg + torch.sum((param - self._initial_params[n]) ** 2)
+            loss = loss + self._l2_lambda * reg
 
         # Return loss dictionary
         loss_dict = {"ce_loss": loss.item(), "loss": loss}
