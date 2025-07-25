@@ -176,3 +176,7 @@ cython_debug/
 
 /Windows
 /outputs
+
+# Local robot simulation / benchmark footage
+/LuckyWorld/
+/so100_5_lego_test/
