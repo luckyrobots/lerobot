@@ -7,6 +7,7 @@ from torch import nn, Tensor
 import torchvision
 from torchvision.models._utils import IntermediateLayerGetter
 import einops
+import copy
 
 from lerobot.policies.act.modeling_act import ACT, ACTSinusoidalPositionEmbedding2d
 from lerobot.policies.adaptive_layer_norm import AdaLayerNorm
@@ -82,7 +83,10 @@ class TaskConditionedTransformerEncoderLayer(nn.Module):
     def _norm_forward(self, norm_layer, x: Tensor, task_embedding: Optional[Tensor] = None) -> Tensor:
         """Apply normalization with optional task conditioning."""
         if self.use_adaln and task_embedding is not None:
-            return norm_layer(x, task_embedding)
+            # AdaLayerNorm expects (B, S, C) but transformer tensors are (S, B, C)
+            x_bt = x.transpose(0, 1)  # (B, S, C)
+            out = norm_layer(x_bt, task_embedding)
+            return out.transpose(0, 1)  # back to (S, B, C)
         else:
             return norm_layer(x)
 
@@ -92,17 +96,20 @@ class TaskConditionedTransformerEncoder(nn.Module):
     
     def __init__(self, encoder_layer: TaskConditionedTransformerEncoderLayer, num_layers: int, norm=None):
         super().__init__()
-        self.layers = nn.ModuleList([encoder_layer for _ in range(num_layers)])
+        self.layers = nn.ModuleList([copy.deepcopy(encoder_layer) for _ in range(num_layers)])
         self.num_layers = num_layers
         self.norm = norm
     
     def forward(
         self,
         src: Tensor,
+        pos_embed: Optional[Tensor] = None,
         mask: Optional[Tensor] = None,
         src_key_padding_mask: Optional[Tensor] = None,
         task_embedding: Optional[Tensor] = None,
     ) -> Tensor:
+        if pos_embed is not None:
+            src = src + pos_embed
         output = src
         
         for layer in self.layers:
@@ -224,9 +231,10 @@ class LuckyACTCore(ACT):
         is_training = self.training
         
         # 1. Get latent variable for VAE
+        mu_hat = log_sigma_x2_hat = None
         if self.config.use_vae and is_training:
-            latent_dist = self._compute_latent_dist(batch)
-            latent_sample = latent_dist.rsample()
+            mu_hat, log_sigma_x2_hat = self._compute_latent_dist(batch)
+            latent_sample = mu_hat + (0.5 * log_sigma_x2_hat).exp() * torch.randn_like(mu_hat)
         else:
             batch_size = next(v for v in batch.values() if isinstance(v, Tensor) and v.ndim > 1).shape[0]
             latent_sample = torch.randn(batch_size, self.config.latent_dim, device=self.device)
@@ -237,6 +245,10 @@ class LuckyACTCore(ACT):
 
         # Task token
         task_embedding = batch.get("task_embedding")
+        # Ensure a valid embedding when AdaLN layers are active
+        if self._use_adaln and task_embedding is None:
+            task_embedding = torch.zeros(latent_sample.shape[0], self._task_embedding_dim, device=latent_sample.device, dtype=latent_sample.dtype)
+        # Task token
         if self._use_task_token and task_embedding is not None:
             task_token = self.task_token_proj(task_embedding).unsqueeze(0)
             task_pos = self.task_token_pos_embed
@@ -283,7 +295,10 @@ class LuckyACTCore(ACT):
         
         actions_hat = self.action_head(decoder_out.transpose(0, 1))
 
-        return actions_hat, (latent_dist if self.config.use_vae and is_training else None)
+        if self.config.use_vae and is_training:
+            return actions_hat, (mu_hat, log_sigma_x2_hat)
+        else:
+            return actions_hat, (None, None)
 
     def _encode_rgb_images(self, batch):
         if not self.config.image_features:
@@ -371,4 +386,4 @@ class LuckyACTCore(ACT):
         mu = latent_pdf_params[:, : self.config.latent_dim]
         log_sigma_x2 = latent_pdf_params[:, self.config.latent_dim :]
  
-        return torch.distributions.Normal(mu, (0.5 * log_sigma_x2).exp()) 
+        return mu, log_sigma_x2 
