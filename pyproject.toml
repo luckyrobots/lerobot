@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -305,4 +304,4 @@ default.extend-ignore-identifiers-re = [
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
->>>>>>> 39687f06d19d49c1172496beb4b1941e407368ee
+
