@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Dict
+from typing import Dict, Optional
 
 import torch
 from lerobot.datasets.lerobot_dataset import LeRobotDatasetMetadata
@@ -8,15 +8,15 @@ from lerobot.datasets.lerobot_dataset import LeRobotDatasetMetadata
 from lerobot.policies.act.modeling_act import ACTPolicy
 from .flow_on_the_fly import FlowOnTheFly
 from .configuration_lucky_act import LuckyACTConfig
+from .task_encoder import create_task_encoder, TaskEncoder
 
 
 class LuckyACTPolicy(ACTPolicy):
-    """Lucky_ACT policy – ACT enhanced with optical-flow fusion.
+    """Lucky_ACT policy – ACT enhanced with optical-flow fusion and task conditioning.
 
-    For now, this class focuses on *injecting* optical-flow maps into the batch
-    on-the-fly.  Architectural changes for fusing the flow tokens are left for a
-    subsequent implementation; the RGB-only ACT backbone continues to operate
-    (flow features are available should the model use them).
+    This class extends ACT with:
+    1. Optical-flow maps injected on-the-fly
+    2. Task conditioning via task tokens and AdaLayerNorm
     """
 
     config_class = LuckyACTConfig
@@ -139,6 +139,26 @@ class LuckyACTPolicy(ACTPolicy):
 
             self._flow_transform = FlowOnTheFly(cam_to_flow)
 
+        # Initialize task encoder if task conditioning is enabled
+        self._task_encoder: Optional[TaskEncoder] = None
+        if config.use_task_conditioning:
+            task_encoder_kwargs = {
+                "cache_size": config.task_encoder_cache_size,
+            }
+            if config.task_encoder_type == "learned":
+                task_encoder_kwargs["vocab_size"] = config.task_vocab_size
+                task_encoder_kwargs["embedding_dim"] = config.task_embedding_dim
+
+            self._task_encoder = create_task_encoder(
+                encoder_type=config.task_encoder_type,
+                model_name=config.task_encoder_model,
+                device=config.device,
+                **task_encoder_kwargs,
+            )
+            
+            # Update config with actual embedding dimension from encoder
+            config.task_embedding_dim = self._task_encoder.get_embedding_dim()
+
         # Temporarily call ACTPolicy init but suppress model creation, then replace.
         super().__init__(config, dataset_stats=dataset_stats)
 
@@ -148,7 +168,7 @@ class LuckyACTPolicy(ACTPolicy):
         self.model = LuckyACTCore(config)
 
     # ------------------------------------------------------------------
-    # Internal helper
+    # Internal helpers
     # ------------------------------------------------------------------
     def _maybe_compute_flow(self, batch):
         # Aggregate per-camera images into a list consumed by ACT/Lucky-ACT cores.
@@ -204,19 +224,62 @@ class LuckyACTPolicy(ACTPolicy):
             batch = self._flow_transform(batch)
         return batch
 
+    def _maybe_compute_task_embedding(self, batch):
+        """Compute task embedding from task_description if present."""
+        if self._task_encoder is None or "task_description" not in batch:
+            return batch
+        
+        # Extract task descriptions
+        task_descriptions = batch["task_description"]
+        
+        # Handle different input formats
+        if isinstance(task_descriptions, (list, tuple)):
+            # List of strings
+            pass
+        elif isinstance(task_descriptions, torch.Tensor) and task_descriptions.dim() == 0:
+            # Single string as tensor
+            task_descriptions = [task_descriptions.item()]
+        elif hasattr(task_descriptions, '__iter__') and not isinstance(task_descriptions, str):
+            # Some iterable of strings
+            task_descriptions = list(task_descriptions)
+        else:
+            # Single string
+            task_descriptions = [task_descriptions]
+        
+        # Compute embeddings
+        task_embedding = self._task_encoder.encode(task_descriptions)
+        
+        # Move to same device as other batch data
+        if batch:
+            # Find a tensor in the batch to get the device
+            for v in batch.values():
+                if isinstance(v, torch.Tensor):
+                    device = v.device
+                    break
+            else:
+                device = self.config.device
+        else:
+            device = self.config.device
+        batch["task_embedding"] = task_embedding.to(device)
+        
+        return batch
+
     # ------------------------------------------------------------------
-    # Overrides to inject flow computation before ACT logic
+    # Overrides to inject flow computation and task embedding before ACT logic
     # ------------------------------------------------------------------
     @torch.no_grad()
     def select_action(self, batch):  # type: ignore[override]
         batch = self._maybe_compute_flow(batch)
+        batch = self._maybe_compute_task_embedding(batch)
         return super().select_action(batch)
 
     @torch.no_grad()
     def predict_action_chunk(self, batch):  # type: ignore[override]
         batch = self._maybe_compute_flow(batch)
+        batch = self._maybe_compute_task_embedding(batch)
         return super().predict_action_chunk(batch)
 
     def forward(self, batch):  # type: ignore[override]
         batch = self._maybe_compute_flow(batch)
+        batch = self._maybe_compute_task_embedding(batch)
         return super().forward(batch) 

@@ -18,6 +18,7 @@ class LuckyACTConfig(ACTConfig):
     • Uses two observation steps (current & previous) so optical-flow can be
       computed on-the-fly.
     • Adds parameters controlling flow backbone and fusion.
+    • Adds task conditioning support via task tokens and AdaLayerNorm.
     """
 
     # Add new field for auto-inference
@@ -66,6 +67,30 @@ class LuckyACTConfig(ACTConfig):
     flow_on_the_fly: FlowOnTheFly | None = None
     
     push_to_hub: bool = False
+
+    # --- Task conditioning arguments ---
+    # Whether to use task conditioning (task tokens + AdaLayerNorm)
+    use_task_conditioning: bool = False
+    
+    # Task encoder settings
+    task_encoder_type: str = "sentence-transformer"  # "sentence-transformer", "clip", "learned"
+    task_encoder_model: str = "sentence-transformers/all-MiniLM-L6-v2"
+    task_embedding_dim: int = 384  # Will be inferred from encoder if not specified
+    
+    # Whether to use AdaLayerNorm with task context
+    use_adaln_task_context: bool = True
+    
+    # Whether to add task token to transformer input
+    use_task_token: bool = True
+    
+    # Task token position ("prepend" or "append")
+    task_token_position: str = "prepend"
+    
+    # Learned task embedding settings (only for "learned" encoder)
+    task_vocab_size: int = 1000
+    
+    # Cache size for task encoder
+    task_encoder_cache_size: int = 1024
 
     # ------------------------------------------------------------------
     # Validation overrides
@@ -129,6 +154,17 @@ class LuckyACTConfig(ACTConfig):
             )
 
         # Skip the `n_obs_steps != 1` restriction from ACTConfig.
+        
+        # Validate task conditioning settings
+        if self.use_task_conditioning:
+            if not self.use_task_token and not self.use_adaln_task_context:
+                raise ValueError("Task conditioning requires at least one of: use_task_token, use_adaln_task_context")
+            
+            if self.task_token_position not in ["prepend", "append"]:
+                raise ValueError(f"task_token_position must be 'prepend' or 'append', got {self.task_token_position}")
+            
+            if self.task_encoder_type not in ["sentence-transformer", "clip", "learned"]:
+                raise ValueError(f"Unknown task_encoder_type: {self.task_encoder_type}")
 
         # Finally, run feature validation (may raise) defined above.
         self.validate_features() 
