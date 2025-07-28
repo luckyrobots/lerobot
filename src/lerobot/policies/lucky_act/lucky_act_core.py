@@ -239,20 +239,20 @@ class LuckyACTCore(ACT):
         task_embedding = batch.get("task_embedding")
         if self._use_task_token and task_embedding is not None:
             task_token = self.task_token_proj(task_embedding).unsqueeze(0)
-            task_pos = self.task_token_pos_embed.expand(1, task_token.shape[1], -1)
+            task_pos = self.task_token_pos_embed
             if self._task_token_position == "prepend":
                 encoder_in_tokens.append(task_token)
                 encoder_in_pos.append(task_pos)
 
         # Latent token
         encoder_in_tokens.append(self.encoder_latent_input_proj(latent_sample).unsqueeze(0))
-        encoder_in_pos.append(self.encoder_1d_feature_pos_embed.weight[0].unsqueeze(0).unsqueeze(1).expand(-1, latent_sample.shape[0], -1))
+        encoder_in_pos.append(self.encoder_1d_feature_pos_embed.weight[0].unsqueeze(0).unsqueeze(1))
 
         # Robot state token
         if self.config.robot_state_feature:
             robot_state = batch["observation.state"][:, -1] if batch["observation.state"].ndim == 3 else batch["observation.state"]
             encoder_in_tokens.append(self.encoder_robot_state_input_proj(robot_state).unsqueeze(0))
-            encoder_in_pos.append(self.encoder_1d_feature_pos_embed.weight[1].unsqueeze(0).unsqueeze(1).expand(-1, robot_state.shape[0], -1))
+            encoder_in_pos.append(self.encoder_1d_feature_pos_embed.weight[1].unsqueeze(0).unsqueeze(1))
 
         # RGB and Flow camera tokens
         rgb_tokens, rgb_pos = self._encode_rgb_images(batch)
