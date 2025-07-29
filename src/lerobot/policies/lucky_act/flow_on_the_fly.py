@@ -101,12 +101,12 @@ class FlowOnTheFly:
                     curr_np = self._to_numpy(curr_b)
                     flow_uv = self._of_processor.compute_flow(prev_np, curr_np, output_numpy=True)
                     flows.append(torch.from_numpy(flow_uv).permute(2, 0, 1))
-                flow_tensor = torch.stack(flows, dim=0)  # (B,2,H,W)
+                flow_tensor = torch.stack(flows, dim=0).to(img_tensor.device)  # (B,2,H,W)
             else:
                 prev_np = self._to_numpy(prev)
                 curr_np = self._to_numpy(curr)
                 flow_uv = self._of_processor.compute_flow(prev_np, curr_np, output_numpy=True)
-                flow_tensor = torch.from_numpy(flow_uv).permute(2, 0, 1)  # (2,H,W)
+                flow_tensor = torch.from_numpy(flow_uv).permute(2, 0, 1).to(img_tensor.device)  # (2,H,W)
 
             batch[flow_key] = flow_tensor
 
