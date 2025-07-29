@@ -126,4 +126,57 @@ class FlowOnTheFly:
         else:
             raise ValueError(f"Unsupported image dtype: {img.dtype}")
         img_np = img_clamped.permute(1, 2, 0).cpu().numpy()
-        return img_np 
+        return img_np
+
+# -----------------------------------------------------------------------------
+# Draccus integration – custom decoding support
+# -----------------------------------------------------------------------------
+# Lucky-ACT exposes an optional `flow_on_the_fly` attribute in its
+# configuration dataclass.  The value can be set via CLI / YAML either to a
+# mapping of *camera-key → flow-key* pairs **or** `null` to disable the
+# feature.  Because `FlowOnTheFly` is a regular Python class (not itself a
+# dataclass), we need to teach Draccus how to instantiate it from those raw
+# values.
+
+# We do this once, here, to keep the registration local to the implementation
+# and avoid polluting higher-level modules.
+
+
+try:
+    from draccus import decode as _draccus_decode  # type: ignore
+
+    # Register decoder for FlowOnTheFly objects.  Draccus' `register()` API
+    # expects a *type* (not a string) as the first argument.
+    @_draccus_decode.register(FlowOnTheFly)  # type: ignore[arg-type]
+    def _decode_flow_on_the_fly(raw_value, path):  # noqa: D401, ANN001
+        """Decode *raw_value* into a :class:`FlowOnTheFly` instance.
+
+        Parameters
+        ----------
+        raw_value: The value provided in the configuration file / CLI.  The
+            following inputs are accepted:
+
+            • ``None`` / ``null`` – returns ``None`` (feature disabled)
+            • A *mapping* (e.g. YAML/JSON object) – treated as
+              ``{cam_key: flow_key, ...}``
+        path: Tuple[str, ...]
+            Internal Draccus bookkeeping (unused here).
+        """
+
+        # Null / disabled
+        if raw_value is None:
+            return None
+
+        # Mapping – instantiate transform on the fly
+        if isinstance(raw_value, dict):
+            return FlowOnTheFly(raw_value)
+
+        raise ValueError(
+            "`flow_on_the_fly` expects either `null` or a mapping of camera keys"
+            f" to flow keys.  Got value of type {type(raw_value)} at {path}."
+        )
+
+except ModuleNotFoundError:  # pragma: no cover – Draccus optional dependency
+    # Draccus is an optional dependency at inference time; silently ignore if
+    # it is not available so that importing this module does not raise.
+    pass 

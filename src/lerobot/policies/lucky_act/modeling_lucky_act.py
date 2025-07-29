@@ -79,13 +79,48 @@ class LuckyACTPolicy(ACTPolicy):
                         img_shape = meta.features[k]["shape"]
                         config.input_features[k] = PolicyFeature(type=FeatureType.VISUAL, shape=img_shape)
 
-            # Infer flow features
-            flow_keys = [k for k, v in meta.features.items() if "flow" in k]
+            # ------------------------------------------------------------------
+            # Infer or auto-generate flow keys.
+            # ------------------------------------------------------------------
+            flow_keys = [k for k, _ in meta.features.items() if "flow" in k]
+
             if flow_keys:
+                # Dataset already provides pre-computed flow maps → use them.
                 config.flow_features = flow_keys
-            else:
-                # Disable flow fusion if no flow keys are found
-                config.enable_flow_fusion = False
+            elif config.enable_flow_fusion:
+                # Dataset lacks flow maps but the user requested fusion →
+                # create placeholder keys that will be filled by
+                # `FlowOnTheFly` at runtime.
+
+                image_keys = list(config.image_features)
+                auto_flow_keys: list[str] = []
+
+                for cam_key in image_keys:
+                    # Normalise common naming schemes (underscore vs dot).
+                    if cam_key.startswith("observation.image_"):
+                        # observation.image_cam1  → observation.image_flow_cam1
+                        flow_key = cam_key.replace("observation.image_", "observation.image_flow_", 1)
+                    elif ".image_" in cam_key:
+                        # observation.xyz.image_cam1  → observation.xyz.image_flow_cam1
+                        flow_key = cam_key.replace(".image_", ".image_flow_", 1)
+                    elif ".images." in cam_key:
+                        # observation.images.cam1 → observation.image_flow_cam1
+                        base, cam = cam_key.split(".images.", 1)
+                        flow_key = f"{base}.image_flow_{cam}"
+                    else:
+                        # Fallback – append _flow
+                        flow_key = cam_key + "_flow"
+
+                    # Ensure convention prefix
+                    if not flow_key.startswith("observation."):
+                        flow_key = "observation." + flow_key
+
+                    auto_flow_keys.append(flow_key)
+
+                config.flow_features = auto_flow_keys
+
+                # Leave `enable_flow_fusion` as-is (True) so downstream logic
+                # builds the fusion pipeline.
 
             # Infer environment state
             if "observation.environment_state" in meta.features:

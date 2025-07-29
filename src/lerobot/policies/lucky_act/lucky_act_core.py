@@ -143,6 +143,9 @@ class LuckyACTCore(ACT):
         self._task_token_position = config.task_token_position
         self._task_embedding_dim = config.task_embedding_dim
         
+        # Expose flow_features as a public attribute for compatibility
+        self.flow_features = self._flow_features
+
         # Initialize parent ACT model
         super().__init__(config)
         
@@ -317,7 +320,7 @@ class LuckyACTCore(ACT):
 
     def _encode_flow_images(self, batch):
         all_flow_features, all_flow_pos = [], []
-        for flow_key, backbone in zip(self.flow_features, self.flow_backbones, strict=True):
+        for flow_key, backbone in zip(self._flow_features, self.flow_backbones, strict=True):
             flow = batch[flow_key][:, -1] if batch[flow_key].ndim == 5 else batch[flow_key]
             features = backbone(flow)["feature_map"]
             pos_embed = self.flow_pos_embed(features)

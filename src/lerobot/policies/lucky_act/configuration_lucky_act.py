@@ -101,8 +101,23 @@ class LuckyACTConfig(ACTConfig):
         if not self.auto_infer_features:
             super().validate_features()
 
+        # If the user requested flow fusion but did not specify explicit flow
+        # feature keys, we *defer* validation.  The model code will infer them
+        # from the dataset metadata at runtime (see `modeling_lucky_act.py`).
+        #
+        # We only emit a warning here to alert the user that automatic
+        # inference will kick in.
+
         if self.enable_flow_fusion and not self.flow_features:
-            raise ValueError("Flow features must be specified when enable_flow_fusion=True")
+            import warnings
+
+            warnings.warn(
+                "`enable_flow_fusion` is True but `flow_features` is empty – "
+                "Lucky-ACT will infer flow keys automatically from the "
+                "dataset.  If this is unintended, specify `flow_features` "
+                "explicitly.",
+                stacklevel=2,
+            )
         if self.enable_flow_fusion:
             for key in self.flow_features:
                 if not key.startswith("observation.image_flow"):
