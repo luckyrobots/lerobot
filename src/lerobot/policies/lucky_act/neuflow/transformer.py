@@ -81,8 +81,10 @@ class FeatureAttention(torch.nn.Module):
 
         # reshape back
         concat_features0 = concat_features0.view(b, h, w, c).permute(0, 3, 1, 2).contiguous()  # [B, C, H, W]
-        
         if self.post_norm:
+            # Ensure the input tensor dtype matches the BatchNorm weight dtype to avoid mismatches
+            if concat_features0.dtype != self.norm.weight.dtype:
+                concat_features0 = concat_features0.to(self.norm.weight.dtype)
             concat_features0 = self.norm(concat_features0)
 
         return concat_features0
