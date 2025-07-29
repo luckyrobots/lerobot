@@ -322,6 +322,8 @@ class LuckyACTCore(ACT):
         all_flow_features, all_flow_pos = [], []
         for flow_key, backbone in zip(self._flow_features, self.flow_backbones, strict=True):
             flow = batch[flow_key][:, -1] if batch[flow_key].ndim == 5 else batch[flow_key]
+            # Move the flow tensor to the same device as the backbone to avoid CPU/GPU mismatches
+            flow = flow.to(next(backbone.parameters()).device, non_blocking=True)
             features = backbone(flow)["feature_map"]
             pos_embed = self.flow_pos_embed(features)
             

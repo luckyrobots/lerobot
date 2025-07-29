@@ -48,11 +48,8 @@ class LuckyACTConfig(ACTConfig):
     )
 
     # --- flow arguments ---
-    # by default, no flow is used
-    flow_features: list[str] = field(default_factory=list)
-
-    # settings for fusion of flow and RGB
-    enable_flow_fusion: bool = False
+    # (duplicate definitions of `flow_features` and `enable_flow_fusion` removed
+    #  – defaults are declared earlier, lines ~30-35.)
     # which layers to fuse flow into
     fusion_layers: list[int] = field(default_factory=lambda: [0, 1, 2, 3, 4, 5, 6, 7])
     # whether to use a separate projection for flow

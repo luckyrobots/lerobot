@@ -119,9 +119,6 @@ class LuckyACTPolicy(ACTPolicy):
 
                 config.flow_features = auto_flow_keys
 
-                # Leave `enable_flow_fusion` as-is (True) so downstream logic
-                # builds the fusion pipeline.
-
             # Infer environment state
             if "observation.environment_state" in meta.features:
                 from lerobot.configs.types import PolicyFeature, FeatureType
@@ -131,6 +128,34 @@ class LuckyACTPolicy(ACTPolicy):
 
             # Now that features are populated, run validation.
             config.validate_features()
+
+        # ------------------------------------------------------------------
+        # Fallback: user disabled auto-infer *or* no dataset_path, but still
+        # requested optical-flow fusion.  If `flow_features` is empty we
+        # generate placeholder keys directly from the image feature names so
+        # that the rest of the pipeline (FlowOnTheFly, LuckyACTCore) is still
+        # constructed.
+        # ------------------------------------------------------------------
+        if config.enable_flow_fusion and not config.flow_features:
+            auto_flow_keys: list[str] = []
+
+            for cam_key in list(config.image_features):
+                if cam_key.startswith("observation.image_"):
+                    flow_key = cam_key.replace("observation.image_", "observation.image_flow_", 1)
+                elif ".image_" in cam_key:
+                    flow_key = cam_key.replace(".image_", ".image_flow_", 1)
+                elif ".images." in cam_key:
+                    base, cam = cam_key.split(".images.", 1)
+                    flow_key = f"{base}.image_flow_{cam}"
+                else:
+                    flow_key = cam_key + "_flow"
+
+                if not flow_key.startswith("observation."):
+                    flow_key = "observation." + flow_key
+
+                auto_flow_keys.append(flow_key)
+
+            config.flow_features = auto_flow_keys
 
         # Build flow transform if enabled
         self._flow_transform = None
