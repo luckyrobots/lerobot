@@ -189,8 +189,33 @@ class VideoDecoderCache:
 
         with self._lock:
             if video_path not in self._cache:
-                file_handle = fsspec.open(video_path).__enter__()
-                decoder = VideoDecoder(file_handle, seek_mode="approximate")
+                # Prefer direct-path initialization for local files (more robust on some MKV containers)
+                decoder = None
+                file_handle = None
+                try:
+                    # Try direct path first if the file exists locally
+                    local_path = Path(video_path)
+                    if local_path.exists():
+                        decoder = VideoDecoder(str(local_path), seek_mode="exact")
+                    else:
+                        # Not a local path: use fsspec file handle
+                        file_handle = fsspec.open(video_path).__enter__()
+                        decoder = VideoDecoder(file_handle, seek_mode="exact")
+                except Exception:
+                    # If fsspec path failed, try direct path as a fallback when possible
+                    if file_handle is not None:
+                        try:
+                            file_handle.close()
+                        except Exception:
+                            pass
+                        file_handle = None
+                    local_path = Path(video_path)
+                    if decoder is None and local_path.exists():
+                        decoder = VideoDecoder(str(local_path), seek_mode="exact")
+                    else:
+                        # Re-raise: caller handles fallback to other backends if needed
+                        raise
+
                 self._cache[video_path] = (decoder, file_handle)
 
             return self._cache[video_path][0]
@@ -199,7 +224,8 @@ class VideoDecoderCache:
         """Clear the cache and close file handles."""
         with self._lock:
             for _, file_handle in self._cache.values():
-                file_handle.close()
+                if file_handle is not None:
+                    file_handle.close()
             self._cache.clear()
 
     def size(self) -> int:
@@ -342,8 +368,8 @@ def encode_video_frames(
     # Define video output frame size (assuming all input frames are the same size)
     if len(input_list) == 0:
         raise FileNotFoundError(f"No images found in {imgs_dir}.")
-    dummy_image = Image.open(input_list[0])
-    width, height = dummy_image.size
+    with Image.open(input_list[0]) as dummy_image:
+        width, height = dummy_image.size
 
     # Define video codec options
     video_options = {}
@@ -373,11 +399,12 @@ def encode_video_frames(
 
         # Loop through input frames and encode them
         for input_data in input_list:
-            input_image = Image.open(input_data).convert("RGB")
-            input_frame = av.VideoFrame.from_image(input_image)
-            packet = output_stream.encode(input_frame)
-            if packet:
-                output.mux(packet)
+            with Image.open(input_data) as input_image:
+                input_image = input_image.convert("RGB")
+                input_frame = av.VideoFrame.from_image(input_image)
+                packet = output_stream.encode(input_frame)
+                if packet:
+                    output.mux(packet)
 
         # Flush the encoder
         packet = output_stream.encode()

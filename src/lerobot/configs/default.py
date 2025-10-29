@@ -35,6 +35,8 @@ class DatasetConfig:
     use_imagenet_stats: bool = True
     video_backend: str = field(default_factory=get_safe_default_codec)
     streaming: bool = False
+    # Tolerance in seconds for matching requested timestamps to closest video frame
+    tolerance_s: float = 0.0333
 
 
 @dataclass
@@ -57,7 +59,7 @@ class EvalConfig:
     # `use_async_envs` specifies whether to use asynchronous environments (multiprocessing).
     use_async_envs: bool = False
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.batch_size > self.n_episodes:
             raise ValueError(
                 "The eval batch size is greater than the number of eval episodes "
