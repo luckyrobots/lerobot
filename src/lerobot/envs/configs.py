@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
 import abc
 from dataclasses import dataclass, field
 from typing import Any, Optional
@@ -245,8 +247,8 @@ class EnvTransformConfig:
 class HILSerlRobotEnvConfig(EnvConfig):
     """Configuration for the HILSerlRobotEnv environment."""
 
-    robot: Optional[RobotConfig] = None
-    teleop: Optional[TeleoperatorConfig] = None
+    robot: Optional["RobotConfig"] = None
+    teleop: Optional["TeleoperatorConfig"] = None
     wrapper: Optional[EnvTransformConfig] = None
     fps: int = 10
     name: str = "real_robot"
@@ -299,8 +301,8 @@ class HILEnvConfig(EnvConfig):
     )
     ################# args from hilserlrobotenv
     reward_classifier_pretrained_path: Optional[str] = None
-    robot_config: Optional[RobotConfig] = None
-    teleop_config: Optional[TeleoperatorConfig] = None
+    robot_config: Optional["RobotConfig"] = None
+    teleop_config: Optional["TeleoperatorConfig"] = None
     wrapper: Optional[EnvTransformConfig] = None
     mode: str = None  # Either "record", "replay", None
     repo_id: Optional[str] = None

@@ -14,6 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import logging
+import json
+from pathlib import Path
 from pprint import pformat
 
 import torch
@@ -31,6 +33,31 @@ IMAGENET_STATS = {
     "mean": [[[0.485]], [[0.456]], [[0.406]]],  # (c,1,1)
     "std": [[[0.229]], [[0.224]], [[0.225]]],  # (c,1,1)
 }
+
+
+def _resolve_dataset_folder(repo_id: str, root: str | Path | None) -> Path:
+    if root is None:
+        # Let downstream handle HF cache resolution
+        return Path(".")
+    root = Path(root)
+    if (root / "meta" / "info.json").is_file():
+        return root
+    if (root / repo_id / "meta" / "info.json").is_file():
+        return root / repo_id
+    return root
+
+
+def _is_v3_session(repo_id: str, root: str | Path | None) -> bool:
+    try:
+        ds_root = _resolve_dataset_folder(repo_id, root)
+        info_path = ds_root / "meta" / "info.json"
+        if not info_path.is_file():
+            return False
+        with info_path.open("r", encoding="utf-8") as f:
+            info = json.load(f)
+        return str(info.get("codebase_version", "")).startswith("v3.")
+    except Exception:
+        return False
 
 
 def resolve_delta_timestamps(
@@ -83,19 +110,38 @@ def make_dataset(cfg: TrainPipelineConfig) -> LeRobotDataset | MultiLeRobotDatas
     )
 
     if isinstance(cfg.dataset.repo_id, str):
-        ds_meta = LeRobotDatasetMetadata(
-            cfg.dataset.repo_id, root=cfg.dataset.root, revision=cfg.dataset.revision
-        )
-        delta_timestamps = resolve_delta_timestamps(cfg.policy, ds_meta)
-        dataset = LeRobotDataset(
-            cfg.dataset.repo_id,
-            root=cfg.dataset.root,
-            episodes=cfg.dataset.episodes,
-            delta_timestamps=delta_timestamps,
-            image_transforms=image_transforms,
-            revision=cfg.dataset.revision,
-            video_backend=cfg.dataset.video_backend,
-        )
+        if _is_v3_session(cfg.dataset.repo_id, cfg.dataset.root):
+            from lerobot.datasets.v3.lerobot_dataset_v3 import LeRobotDatasetMetadataV3, LeRobotDatasetV3
+
+            ds_meta = LeRobotDatasetMetadataV3(
+                repo_id=cfg.dataset.repo_id,
+                root=_resolve_dataset_folder(cfg.dataset.repo_id, cfg.dataset.root),
+                revision=cfg.dataset.revision,
+            )
+            delta_timestamps = resolve_delta_timestamps(cfg.policy, ds_meta)  # type: ignore[arg-type]
+            dataset = LeRobotDatasetV3(
+                cfg.dataset.repo_id,
+                root=cfg.dataset.root,
+                episodes=cfg.dataset.episodes,
+                delta_timestamps=delta_timestamps,
+                image_transforms=image_transforms,
+                revision=cfg.dataset.revision,
+                video_backend=cfg.dataset.video_backend,
+            )
+        else:
+            ds_meta = LeRobotDatasetMetadata(
+                cfg.dataset.repo_id, root=cfg.dataset.root, revision=cfg.dataset.revision
+            )
+            delta_timestamps = resolve_delta_timestamps(cfg.policy, ds_meta)
+            dataset = LeRobotDataset(
+                cfg.dataset.repo_id,
+                root=cfg.dataset.root,
+                episodes=cfg.dataset.episodes,
+                delta_timestamps=delta_timestamps,
+                image_transforms=image_transforms,
+                revision=cfg.dataset.revision,
+                video_backend=cfg.dataset.video_backend,
+            )
     else:
         raise NotImplementedError("The MultiLeRobotDataset isn't supported for now.")
         dataset = MultiLeRobotDataset(

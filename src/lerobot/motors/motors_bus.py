@@ -28,7 +28,16 @@ from functools import cached_property
 from pprint import pformat
 from typing import Protocol, TypeAlias
 
-import serial
+try:
+    import serial  # pyserial
+except ModuleNotFoundError as e:  # pragma: no cover
+    raise ModuleNotFoundError(
+        "Missing optional dependency `pyserial` (provides `import serial`).\n"
+        "If you're running LeRobot from source via `PYTHONPATH=lerobot/src`, install deps explicitly:\n"
+        "  - pip install pyserial\n"
+        "Or install LeRobot (recommended) so all dependencies are pulled in:\n"
+        "  - pip install -e ./lerobot\n"
+    ) from e
 from deepdiff import DeepDiff
 from tqdm import tqdm
 
