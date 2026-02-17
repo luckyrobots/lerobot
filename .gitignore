@@ -166,6 +166,8 @@ wandb/
 # Data folders
 data/
 outputs/
+sweep_out/
+sweep_out_100k/
 
 # Translations
 *.mo

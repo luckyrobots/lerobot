@@ -58,13 +58,22 @@ def get_safe_torch_device(try_device: str, log: bool = False) -> torch.device:
     """Given a string, return a torch.device with checks on whether the device is available."""
     try_device = str(try_device)
     if try_device.startswith("cuda"):
-        assert torch.cuda.is_available()
+        if not torch.cuda.is_available():
+            if log:
+                logging.warning(f"Device '{try_device}' is not available. Falling back to 'cpu'.")
+            return torch.device("cpu")
         device = torch.device(try_device)
     elif try_device == "mps":
-        assert torch.backends.mps.is_available()
+        if not torch.backends.mps.is_available():
+            if log:
+                logging.warning("Device 'mps' is not available. Falling back to 'cpu'.")
+            return torch.device("cpu")
         device = torch.device("mps")
     elif try_device == "xpu":
-        assert torch.xpu.is_available()
+        if not torch.xpu.is_available():
+            if log:
+                logging.warning("Device 'xpu' is not available. Falling back to 'cpu'.")
+            return torch.device("cpu")
         device = torch.device("xpu")
     elif try_device == "cpu":
         device = torch.device("cpu")
