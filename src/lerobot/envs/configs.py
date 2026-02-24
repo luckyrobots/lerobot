@@ -388,6 +388,100 @@ class MetaworldEnv(EnvConfig):
         }
 
 
+@EnvConfig.register_subclass("piper_room")
+@dataclass
+class PiperRoomEnvConfig(EnvConfig):
+    """Configuration for the PiperRoom LuckyEngine gRPC environment.
+
+    Wraps the Piper arm in LuckyEngine's Piper-room scene via HazelBackend gRPC.
+    Only n_envs=1 is meaningfully supported with a single Hazel server.
+    """
+
+    task: str | None = "PiperRoom-v0"
+    fps: int = 30
+    episode_length: int = 300
+
+    # gRPC connection
+    host: str = "127.0.0.1"
+    port: int = 50051
+    agent_name: str = "agent_0"
+    robot_name: str = ""
+
+    # Camera setup
+    camera_names: tuple[str, ...] = ("CameraGripper", "CameraLeft", "CameraTop")
+    camera_width: int = 320
+    camera_height: int = 240
+
+    # Task parameters
+    success_dist_m: float = 0.05
+    object_tag: str = "Red Block"
+    goal_tag: str = "Dropbox"
+    goal_center_offset: tuple[float, float, float] = (0.0, 0.0, 0.0)
+
+    # Reset parameters
+    home_action: tuple[float, ...] = (0.0, 1.57, -1.3485, 0.0, 0.0, 0.0, 0.035)
+    object_reset_pos: tuple[float, float, float] = (0.317096353, 0.0464101955, 0.000183301046)
+    object_reset_quat: tuple[float, float, float, float] = (0.0, 0.0, 0.0, 1.0)
+    reset_settle_s: float = 1.5
+    reset_hz: float = 30.0
+    object_reset_hold_s: float = 0.25
+    object_reset_hold_hz: float = 30.0
+    startup_grace_s: float = 2.0
+
+    features: dict[str, PolicyFeature] = field(
+        default_factory=lambda: {
+            ACTION: PolicyFeature(type=FeatureType.ACTION, shape=(7,)),
+            "agent_pos": PolicyFeature(type=FeatureType.STATE, shape=(7,)),
+            "pixels.CameraGripper": PolicyFeature(type=FeatureType.VISUAL, shape=(240, 320, 3)),
+            "pixels.CameraLeft": PolicyFeature(type=FeatureType.VISUAL, shape=(240, 320, 3)),
+            "pixels.CameraTop": PolicyFeature(type=FeatureType.VISUAL, shape=(240, 320, 3)),
+        }
+    )
+    features_map: dict[str, str] = field(
+        default_factory=lambda: {
+            ACTION: ACTION,
+            "agent_pos": OBS_STATE,
+            "pixels.CameraGripper": f"{OBS_IMAGES}.CameraGripper",
+            "pixels.CameraLeft": f"{OBS_IMAGES}.CameraLeft",
+            "pixels.CameraTop": f"{OBS_IMAGES}.CameraTop",
+        }
+    )
+
+    def __post_init__(self):
+        # Keep feature shapes in sync with configured camera dimensions
+        for cam in self.camera_names:
+            self.features[f"pixels.{cam}"] = PolicyFeature(
+                type=FeatureType.VISUAL,
+                shape=(self.camera_height, self.camera_width, 3),
+            )
+
+    @property
+    def gym_kwargs(self) -> dict:
+        return {
+            "host": self.host,
+            "port": self.port,
+            "agent_name": self.agent_name,
+            "robot_name": self.robot_name,
+            "camera_names": self.camera_names,
+            "camera_width": self.camera_width,
+            "camera_height": self.camera_height,
+            "fps": self.fps,
+            "episode_length": self.episode_length,
+            "success_dist_m": self.success_dist_m,
+            "object_tag": self.object_tag,
+            "goal_tag": self.goal_tag,
+            "goal_center_offset": self.goal_center_offset,
+            "home_action": list(self.home_action),
+            "object_reset_pos": self.object_reset_pos,
+            "object_reset_quat": self.object_reset_quat,
+            "reset_settle_s": self.reset_settle_s,
+            "reset_hz": self.reset_hz,
+            "object_reset_hold_s": self.object_reset_hold_s,
+            "object_reset_hold_hz": self.object_reset_hold_hz,
+            "startup_grace_s": self.startup_grace_s,
+        }
+
+
 @EnvConfig.register_subclass("isaaclab_arena")
 @dataclass
 class IsaaclabArenaEnv(HubEnvConfig):

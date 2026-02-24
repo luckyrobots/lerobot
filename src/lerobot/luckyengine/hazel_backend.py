@@ -104,15 +104,59 @@ class HazelBackend:
             raise RuntimeError("Backend not connected. Call connect() first.")
 
         req = self._pb2.StreamAgentRequest(agent_name=agent_name, target_fps=int(target_fps))
+        schema_req = self._pb2.GetAgentSchemaRequest(agent_name=agent_name)
+        with self._lock:
+            self._agent_stream_error = None
 
         def _run() -> None:
+            # AgentService can transiently report an empty schema while scene startup is still in-flight.
+            ready_deadline = time.perf_counter() + 15.0
+            while not self._stop.is_set():
+                try:
+                    schema = self._agent.GetAgentSchema(schema_req, timeout=self._timeout_s).schema
+                except Exception as e:
+                    with self._lock:
+                        self._agent_stream_error = e
+                    return
+                if int(getattr(schema, "observation_size", 0)) > 0:
+                    break
+                if time.perf_counter() >= ready_deadline:
+                    with self._lock:
+                        self._agent_stream_error = RuntimeError(
+                            f"Agent '{agent_name}' never became ready (observation_size=0). "
+                            "Ensure the scene is in Play mode and the agent name is correct."
+                        )
+                    return
+                time.sleep(0.1)
+
+            empty_closes = 0
             try:
-                for frame in self._agent.StreamAgent(req, timeout=None):
+                while not self._stop.is_set():
+                    saw_frame = False
+                    for frame in self._agent.StreamAgent(req, timeout=None):
+                        if self._stop.is_set():
+                            return
+                        saw_frame = True
+                        obs = np.asarray(frame.observations, dtype=np.float32)
+                        with self._lock:
+                            self._latest_state = obs
                     if self._stop.is_set():
                         return
-                    obs = np.asarray(frame.observations, dtype=np.float32)
-                    with self._lock:
-                        self._latest_state = obs
+                    if saw_frame:
+                        with self._lock:
+                            self._agent_stream_error = RuntimeError(
+                                "Agent stream closed unexpectedly after receiving data."
+                            )
+                        return
+                    empty_closes += 1
+                    if empty_closes >= 3:
+                        with self._lock:
+                            self._agent_stream_error = RuntimeError(
+                                "Agent stream closed before first observation after multiple retries. "
+                                "Verify scene runtime state and agent registration."
+                            )
+                        return
+                    time.sleep(0.2)
             except Exception as e:
                 with self._lock:
                     self._agent_stream_error = e
@@ -133,15 +177,37 @@ class HazelBackend:
             height=int(cfg.height),
             format=str(cfg.format),
         )
+        with self._lock:
+            self._camera_stream_errors.pop(camera_name, None)
 
         def _run() -> None:
             try:
-                for frame in self._camera.StreamCamera(req, timeout=None):
+                empty_closes = 0
+                while not self._stop.is_set():
+                    saw_frame = False
+                    for frame in self._camera.StreamCamera(req, timeout=None):
+                        if self._stop.is_set():
+                            return
+                        saw_frame = True
+                        img = _decode_image_frame(frame)
+                        with self._lock:
+                            self._latest_images[camera_name] = img
                     if self._stop.is_set():
                         return
-                    img = _decode_image_frame(frame)
-                    with self._lock:
-                        self._latest_images[camera_name] = img
+                    if saw_frame:
+                        with self._lock:
+                            self._camera_stream_errors[camera_name] = RuntimeError(
+                                f"Camera stream '{camera_name}' closed unexpectedly after receiving data."
+                            )
+                        return
+                    empty_closes += 1
+                    if empty_closes >= 3:
+                        with self._lock:
+                            self._camera_stream_errors[camera_name] = RuntimeError(
+                                f"Camera stream '{camera_name}' closed before first frame after multiple retries."
+                            )
+                        return
+                    time.sleep(0.2)
             except Exception as e:
                 with self._lock:
                     self._camera_stream_errors[camera_name] = e
@@ -180,7 +246,16 @@ class HazelBackend:
             for name in camera_names:
                 if name not in self._latest_images:
                     missing.append(f"camera:{name}")
-        raise TimeoutError(f"Timed out waiting for initial observations: {missing}")
+            agent_err = self._agent_stream_error
+            cam_errs = {name: self._camera_stream_errors.get(name) for name in camera_names}
+        detail_parts = []
+        if agent_err is not None:
+            detail_parts.append(f"agent_error={agent_err}")
+        for name, err in cam_errs.items():
+            if err is not None:
+                detail_parts.append(f"camera_error[{name}]={err}")
+        details = f" ({'; '.join(detail_parts)})" if detail_parts else ""
+        raise TimeoutError(f"Timed out waiting for initial observations: {missing}{details}")
 
     # ----------------------------
     # RPC helpers

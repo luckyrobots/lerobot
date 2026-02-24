@@ -27,7 +27,7 @@ from lerobot.configs.policies import PreTrainedConfig
 
 # Block spawn position used for per-trial resets.
 # Source of truth: `LuckyEngine/LuckyEditor/RobotSandbox/Assets/Scenes/Piper-room.hscene`
-# (entity tag: "Red Block" → TransformComponent.Position).
+# (entity tag: "Red Block" -> TransformComponent.Position).
 DEFAULT_RED_BLOCK_RESET_POS = (0.317096353, 0.0464101955, 0.000183301046)
 DEFAULT_RED_BLOCK_RESET_POS_CSV = ",".join(str(float(x)) for x in DEFAULT_RED_BLOCK_RESET_POS)
 
@@ -431,7 +431,7 @@ def _reset_robot_and_block(
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="Sweep diffusion checkpoints against LuckyEngine Piper-room via Hazel gRPC")
+    ap = argparse.ArgumentParser(description="Sweep ACT checkpoints against LuckyEngine Piper-room via Hazel gRPC")
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--port", type=int, default=0, help="Hazel gRPC port (0 = auto-detect)")
     ap.add_argument("--proto_path", type=str, default=None, help="Optional explicit path to hazel_rpc.proto")
@@ -446,7 +446,7 @@ def main() -> int:
     ap.add_argument("--agent_name", default="agent_0")
     ap.add_argument("--robot_name", default="")
 
-    # Defaults match training dataset: 30 Hz, 320x240
+    # Defaults match ACT training dataset: 30 Hz, 320x240
     ap.add_argument("--control_hz", type=float, default=30.0)
     ap.add_argument("--max_steps", type=int, default=300)
     ap.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu")
@@ -461,7 +461,7 @@ def main() -> int:
         default="",
         help=(
             "Comma-separated policy camera keys (suffixes), e.g. "
-            "'CameraGripper,CameraLeft,CameraTop'. "
+            "'CameraGripper,CameraLeft'. "
             "If empty, auto-detect from first checkpoint config input_features."
         ),
     )
@@ -647,6 +647,13 @@ def main() -> int:
     if not ckpt_dirs:
         raise FileNotFoundError(f"No checkpoints found under {args.checkpoints_root}")
 
+    # Read ACT-specific config from first checkpoint to display info
+    first_cfg_json = load_pretrained_config_json(ckpt_dirs[0])
+    act_chunk_size = first_cfg_json.get("chunk_size", "?")
+    act_n_action_steps = first_cfg_json.get("n_action_steps", "?")
+    act_use_vae = first_cfg_json.get("use_vae", "?")
+    act_temporal_ensemble = first_cfg_json.get("temporal_ensemble_coeff")
+
     trials_per_ckpt = max(1, int(getattr(args, "trials_per_checkpoint", 1)))
     total_trials = len(ckpt_dirs) * trials_per_ckpt
 
@@ -656,6 +663,7 @@ def main() -> int:
 
     # Print configuration summary
     print(f"\n  Configuration:")
+    print(f"    Policy type    : ACT (Action Chunking Transformer)")
     print(f"    Control Hz     : {args.control_hz}")
     print(f"    Camera         : {args.camera_width}x{args.camera_height} @ {args.camera_fps}fps")
     print(f"    Max steps      : {args.max_steps}")
@@ -665,6 +673,10 @@ def main() -> int:
     print(f"    Checkpoints    : {len(ckpt_dirs)}")
     print(f"    Trials/checkpt : {trials_per_ckpt}")
     print(f"    Total trials   : {total_trials}")
+    print(f"    ACT chunk_size : {act_chunk_size}")
+    print(f"    ACT n_action_steps: {act_n_action_steps}")
+    print(f"    ACT use_vae    : {act_use_vae}")
+    print(f"    ACT temporal_ensemble: {act_temporal_ensemble if act_temporal_ensemble is not None else 'disabled'}")
     if bool(args.debug_joint_state):
         print(f"    Debug joint state: True (every {int(args.debug_joint_every)} steps)")
     print(f"    Flip for policy: {args.flip_for_policy}")
@@ -729,6 +741,7 @@ def main() -> int:
         else _extract_policy_camera_keys_from_config(ckpt_dirs[0])
     )
     if not policy_camera_keys:
+        # Fallback: ACT checkpoints typically use CameraGripper + CameraLeft
         policy_camera_keys = list(DEFAULT_PIPER_CONTRACT.camera_keys)
 
     # Build policy->scene mapping and scene camera set to stream.
@@ -781,8 +794,8 @@ def main() -> int:
 
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    jsonl_path = output_dir / "piper_diffusion_sweep.jsonl"
-    csv_path = output_dir / "piper_diffusion_sweep.csv"
+    jsonl_path = output_dir / "piper_act_sweep.jsonl"
+    csv_path = output_dir / "piper_act_sweep.csv"
 
     results: list[CheckpointResult] = []
     trial_counter = 0
@@ -801,14 +814,15 @@ def main() -> int:
                 f"but sweep is configured with {policy_camera_keys}. "
                 "Set --policy_cameras and/or --camera_map to match checkpoint inputs."
             )
-        validate_checkpoint_contract(
-            pm_dir,
-            contract=LuckyEnginePolicyContract(
-                action_dim=DEFAULT_PIPER_CONTRACT.action_dim,
-                state_dim=DEFAULT_PIPER_CONTRACT.state_dim,
-                camera_keys=tuple(policy_camera_keys),
-            ),
+
+        # Build contract from the actual checkpoint camera keys (ACT may use 2 cameras, not 3)
+        ckpt_contract = LuckyEnginePolicyContract(
+            action_dim=DEFAULT_PIPER_CONTRACT.action_dim,
+            state_dim=DEFAULT_PIPER_CONTRACT.state_dim,
+            camera_keys=tuple(policy_camera_keys),
         )
+        validate_checkpoint_contract(pm_dir, contract=ckpt_contract)
+
         policy_cls = get_policy_class(cfg.type)
         policy = policy_cls.from_pretrained(pretrained_name_or_path=str(pm_dir))
         preproc, postproc = make_pre_post_processors(cfg, pretrained_path=str(pm_dir))
@@ -828,7 +842,7 @@ def main() -> int:
 
             policy.reset()
 
-            # ── Per-trial reset: robot to home + block to start pose ──
+            # -- Per-trial reset: robot to home + block to start pose --
             #
             # IMPORTANT: do this *after* checkpoint load. Loading weights can take time,
             # and the simulation continues stepping; resetting early can allow the block
@@ -1005,7 +1019,7 @@ def main() -> int:
             with jsonl_path.open("a", encoding="utf-8") as f:
                 f.write(json.dumps(asdict(res)) + "\n")
 
-            # ── Per-trial result log ──
+            # -- Per-trial result log --
             status_icon = "SUCCESS" if res.success else ("ERROR" if res.error else "FAIL")
             final_dist_s = "n/a" if res.final_dist_m is None else f"{res.final_dist_m:.4f}m"
             print(f"  -------------------------------------------------------")
@@ -1041,7 +1055,7 @@ def main() -> int:
         for r in ranked:
             w.writerow(asdict(r))
 
-    # ── Final sweep summary ──
+    # -- Final sweep summary --
     n_success = sum(1 for r in results if r.success)
     n_error = sum(1 for r in results if r.error)
     n_fail = len(results) - n_success - n_error

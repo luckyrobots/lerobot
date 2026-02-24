@@ -15,6 +15,7 @@
 # limitations under the License.
 import glob
 import importlib
+import json
 import logging
 import shutil
 import tempfile
@@ -26,11 +27,81 @@ from typing import Any, ClassVar
 
 import av
 import fsspec
+import numpy as np
 import pyarrow as pa
 import torch
 import torchvision
 from datasets.features.features import register_feature
 from PIL import Image
+
+
+# ── Fast frame cache ─────────────────────────────────────────────────
+# Pre-decoded 96×96 numpy mmap loaded at import time so DataLoader
+# spawn workers also use it (monkey-patches don't survive spawn).
+_FAST_CACHE_DIR = "/home/zero/imle_training/frames_cache"
+_fast_cache_enabled = False
+_fast_cam_cache: dict = {}
+_fast_ep_starts: list = []
+_fast_fps: float = 30.0
+_fast_H: int = 96
+_fast_W: int = 96
+_fast_N: int = 0
+_fast_chunks_size: int = 100
+
+try:
+    with open(f"{_FAST_CACHE_DIR}/meta.json") as _f:
+        _m = json.load(_f)
+    _fast_fps = float(_m["fps"])
+    _fast_ep_starts = _m["ep_starts"]
+    _fast_chunks_size = int(_m["chunks_size"])
+    _fast_H = int(_m["target_h"])
+    _fast_W = int(_m["target_w"])
+    _fast_N = int(_m["total_frames"])
+    for _cam in _m["camera_keys"]:
+        _fast_cam_cache[_cam] = np.memmap(
+            f"{_FAST_CACHE_DIR}/{_cam}.npy",
+            dtype="uint8",
+            mode="r",
+            shape=(_fast_N, _fast_H, _fast_W, 3),
+        )
+    _fast_cache_enabled = True
+    logging.info(
+        f"[video_utils] Fast mmap cache loaded: {len(_fast_cam_cache)} cameras, "
+        f"{_fast_N} frames at {_fast_H}x{_fast_W}"
+    )
+except Exception:
+    pass  # cache not available — use normal video decode
+
+
+def _decode_from_fast_cache(
+    video_path: Path | str,
+    timestamps: list[float],
+) -> torch.Tensor | None:
+    """Serve frames from pre-decoded mmap cache, or return None on cache miss."""
+    try:
+        parts = Path(str(video_path)).parts
+        vid_idx = next(i for i in range(len(parts) - 1, -1, -1) if parts[i] == "videos")
+        cam_key = parts[vid_idx + 1]
+        chunk_idx = int(parts[vid_idx + 2].split("-")[1])
+        file_idx = int(Path(parts[vid_idx + 3]).stem.split("-")[1])
+        ep_idx = chunk_idx * _fast_chunks_size + file_idx
+    except Exception:
+        return None
+
+    if cam_key not in _fast_cam_cache or ep_idx + 1 >= len(_fast_ep_starts):
+        return None
+
+    ep_start = _fast_ep_starts[ep_idx]
+    ep_len = _fast_ep_starts[ep_idx + 1] - ep_start
+
+    frames = []
+    for ts in timestamps:
+        frame_idx = int(round(ts * _fast_fps))
+        frame_idx = max(0, min(frame_idx, ep_len - 1))
+        arr = np.array(_fast_cam_cache[cam_key][ep_start + frame_idx])
+        frames.append(torch.from_numpy(arr).float().div_(255.0).permute(2, 0, 1))
+
+    return torch.stack(frames)
 
 
 def get_safe_default_codec():
@@ -63,6 +134,11 @@ def decode_video_frames(
 
     Currently supports torchcodec on cpu and pyav.
     """
+    if _fast_cache_enabled:
+        result = _decode_from_fast_cache(video_path, timestamps)
+        if result is not None:
+            return result
+
     if backend is None:
         backend = get_safe_default_codec()
     if backend == "torchcodec":
@@ -254,9 +330,60 @@ def decode_video_frames_torchcodec(
     metadata = decoder.metadata
     average_fps = metadata.average_fps
     # convert timestamps to frame indices
-    frame_indices = [round(ts * average_fps) for ts in timestamps]
+    #
+    # NOTE: torchcodec expects 0 <= index < num_frames. When timestamps are at (or extremely close to)
+    # the end of the video, rounding can produce index == num_frames (off-by-one) and crash with:
+    # "Invalid frame index=X; must be less than X".
+    #
+    # We defensively clamp indices when possible.
+    raw_frame_indices = [round(ts * average_fps) for ts in timestamps]
+
+    def _maybe_get_num_frames(meta: Any) -> int | None:
+        # TorchCodec metadata API has changed across versions; probe common attribute names.
+        for name in (
+            "num_frames",
+            "n_frames",
+            "num_video_frames",
+            "frames",
+            "video_num_frames",
+            "total_frames",
+        ):
+            try:
+                value = getattr(meta, name)
+            except Exception:
+                continue
+            if isinstance(value, int) and value > 0:
+                return value
+        return None
+
+    def _clamp_indices(indices: list[int], num_frames: int | None) -> list[int]:
+        if num_frames is None:
+            return [max(0, i) for i in indices]
+        max_idx = num_frames - 1
+        return [min(max(0, i), max_idx) for i in indices]
+
+    num_frames = _maybe_get_num_frames(metadata)
+    frame_indices = _clamp_indices(raw_frame_indices, num_frames)
+
     # retrieve frames based on indices
-    frames_batch = decoder.get_frames_at(indices=frame_indices)
+    try:
+        frames_batch = decoder.get_frames_at(indices=frame_indices)
+    except IndexError:
+        # If we couldn't determine num_frames (or metadata was wrong), estimate from container duration
+        # and retry once with a clamp. Fall back to torchvision+pyav if it still fails.
+        if num_frames is None:
+            import math
+
+            try:
+                duration_s = get_video_duration_in_s(video_path)
+                # ceil(duration * fps) is a reasonable upper bound for frame count in CFR videos
+                est_num_frames = max(1, int(math.ceil(duration_s * float(average_fps))))
+                frame_indices = _clamp_indices(raw_frame_indices, est_num_frames)
+                frames_batch = decoder.get_frames_at(indices=frame_indices)
+            except Exception:
+                return decode_video_frames_torchvision(video_path, timestamps, tolerance_s, backend="pyav")
+        else:
+            return decode_video_frames_torchvision(video_path, timestamps, tolerance_s, backend="pyav")
 
     for frame, pts in zip(frames_batch.data, frames_batch.pts_seconds, strict=True):
         loaded_frames.append(frame)

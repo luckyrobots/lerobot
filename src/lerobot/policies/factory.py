@@ -32,6 +32,7 @@ from lerobot.envs.utils import env_to_policy_features
 from lerobot.policies.act.configuration_act import ACTConfig
 from lerobot.policies.diffusion.configuration_diffusion import DiffusionConfig
 from lerobot.policies.groot.configuration_groot import GrootConfig
+from lerobot.policies.imle.configuration_imle import IMLEConfig
 from lerobot.policies.pi0.configuration_pi0 import PI0Config
 from lerobot.policies.pi05.configuration_pi05 import PI05Config
 from lerobot.policies.pretrained import PreTrainedPolicy
@@ -123,6 +124,10 @@ def get_policy_class(name: str) -> type[PreTrainedPolicy]:
         from lerobot.policies.groot.modeling_groot import GrootPolicy
 
         return GrootPolicy
+    elif name == "imle":
+        from lerobot.policies.imle.modeling_imle import IMLEPolicy
+
+        return IMLEPolicy
     elif name == "xvla":
         from lerobot.policies.xvla.modeling_xvla import XVLAPolicy
 
@@ -177,6 +182,8 @@ def make_policy_config(policy_type: str, **kwargs) -> PreTrainedConfig:
         return RewardClassifierConfig(**kwargs)
     elif policy_type == "groot":
         return GrootConfig(**kwargs)
+    elif policy_type == "imle":
+        return IMLEConfig(**kwargs)
     elif policy_type == "xvla":
         return XVLAConfig(**kwargs)
     elif policy_type == "wall_x":
@@ -297,6 +304,14 @@ def make_pre_post_processors(
         from lerobot.policies.diffusion.processor_diffusion import make_diffusion_pre_post_processors
 
         processors = make_diffusion_pre_post_processors(
+            config=policy_cfg,
+            dataset_stats=kwargs.get("dataset_stats"),
+        )
+
+    elif isinstance(policy_cfg, IMLEConfig):
+        from lerobot.policies.imle.processor_imle import make_imle_pre_post_processors
+
+        processors = make_imle_pre_post_processors(
             config=policy_cfg,
             dataset_stats=kwargs.get("dataset_stats"),
         )
