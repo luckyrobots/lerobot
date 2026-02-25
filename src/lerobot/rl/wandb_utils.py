@@ -195,6 +195,12 @@ class WandBLogger:
 
             self._wandb.log(data={f"{mode}/{k}": v}, step=step)
 
+    def log_raw(self, d: dict, step: int):
+        """Log metrics without mode prefix — keys are used as-is."""
+        for k, v in d.items():
+            if isinstance(v, (int, float)):
+                self._wandb.log(data={k: v}, step=step)
+
     def log_video(self, video_path: str, step: int, mode: str = "train"):
         if mode not in {"train", "eval"}:
             raise ValueError(mode)

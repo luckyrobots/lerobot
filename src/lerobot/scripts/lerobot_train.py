@@ -27,7 +27,8 @@ from torch.optim import Optimizer
 
 from lerobot.configs import parser
 from lerobot.configs.train import TrainPipelineConfig
-from lerobot.datasets.factory import make_dataset
+from lerobot.datasets.factory import make_dataset, resolve_delta_timestamps
+from lerobot.datasets.lerobot_dataset import LeRobotDataset, LeRobotDatasetMetadata
 from lerobot.datasets.sampler import EpisodeAwareSampler
 from lerobot.datasets.utils import cycle
 from lerobot.envs.factory import make_env, make_env_pre_post_processors
@@ -221,6 +222,50 @@ def train(cfg: TrainPipelineConfig, accelerator: Accelerator | None = None):
     if not is_main_process:
         dataset = make_dataset(cfg)
 
+    # ── Validation dataset (hold-out episodes) ──────────────────────
+    # If the training dataset uses a subset of episodes, create a val dataset
+    # from the remaining episodes for val loss tracking.
+    val_dataloader = None
+    if cfg.dataset.episodes is not None and is_main_process:
+        all_eps = set(range(dataset.meta.total_episodes))
+        train_eps = set(cfg.dataset.episodes)
+        val_eps = sorted(all_eps - train_eps)
+        if val_eps:
+            ds_meta = LeRobotDatasetMetadata(
+                cfg.dataset.repo_id, root=cfg.dataset.root, revision=cfg.dataset.revision
+            )
+            delta_timestamps = resolve_delta_timestamps(cfg.policy, ds_meta)
+            val_dataset = LeRobotDataset(
+                cfg.dataset.repo_id,
+                root=cfg.dataset.root,
+                episodes=val_eps,
+                delta_timestamps=delta_timestamps,
+                image_transforms=None,  # no augmentation for val
+                revision=cfg.dataset.revision,
+                video_backend=cfg.dataset.video_backend,
+                tolerance_s=cfg.tolerance_s,
+            )
+            # Apply ImageNet stats if needed
+            if cfg.dataset.use_imagenet_stats:
+                from lerobot.datasets.factory import IMAGENET_STATS
+                for key in val_dataset.meta.camera_keys:
+                    if key not in val_dataset.meta.stats:
+                        val_dataset.meta.stats[key] = {}
+                    for stats_type, stats in IMAGENET_STATS.items():
+                        val_dataset.meta.stats[key][stats_type] = torch.tensor(stats, dtype=torch.float32)
+            val_dataloader = torch.utils.data.DataLoader(
+                val_dataset,
+                num_workers=0,
+                batch_size=cfg.batch_size,
+                shuffle=False,
+                pin_memory=device.type == "cuda",
+                drop_last=False,
+            )
+            logging.info(
+                f"Val dataset: {val_dataset.num_frames} frames, "
+                f"{val_dataset.num_episodes} episodes ({len(val_eps)} held out)"
+            )
+
     # Create environment used for evaluating checkpoints during training on simulation data.
     # On real-world data, no need to create an environment as evaluations are done outside train.py,
     # using the eval.py instead, with gym_dora environment and dora-rs.
@@ -396,8 +441,16 @@ def train(cfg: TrainPipelineConfig, accelerator: Accelerator | None = None):
 
     for _ in range(step, cfg.steps):
         start_time = time.perf_counter()
-        batch = next(dl_iter)
-        batch = preprocessor(batch)
+        for _retry in range(5):
+            try:
+                batch = next(dl_iter)
+                batch = preprocessor(batch)
+                break
+            except (UnboundLocalError, RuntimeError) as e:
+                if _retry < 4:
+                    logging.warning(f"Dataloader error (retry {_retry+1}/5): {e}")
+                    continue
+                raise
         train_tracker.dataloading_s = time.perf_counter() - start_time
 
         train_tracker, output_dict = update_policy(
@@ -436,7 +489,42 @@ def train(cfg: TrainPipelineConfig, accelerator: Accelerator | None = None):
                         }
                     )
                 wandb_logger.log_dict(wandb_log_dict, step)
+
+                # ── Namespaced metrics (no mode/ prefix) ──
+                train_loss_val = wandb_log_dict.get("loss", 0.0)
+                wandb_logger.log_raw({
+                    "loss/train": train_loss_val,
+                    "optim/lr": wandb_log_dict.get("lr", 0.0),
+                    "optim/grad_norm": wandb_log_dict.get("grad_norm", 0.0),
+                    "perf/update_s": wandb_log_dict.get("update_s", 0.0),
+                    "perf/dataloading_s": wandb_log_dict.get("dataloading_s", 0.0),
+                    "progress/epoch": wandb_log_dict.get("epochs", 0.0),
+                    "progress/samples": wandb_log_dict.get("samples", 0),
+                }, step)
             train_tracker.reset_averages()
+
+        # ── Validation loss ───────────────────────────────────────
+        if is_log_step and val_dataloader is not None:
+            policy.eval()
+            val_losses = []
+            with torch.no_grad(), accelerator.autocast():
+                for i, val_batch in enumerate(val_dataloader):
+                    val_batch = preprocessor(val_batch)
+                    val_loss, _ = accelerator.unwrap_model(policy).forward(val_batch)
+                    val_losses.append(val_loss.item())
+                    if i >= 4:  # cap at 5 batches for speed
+                        break
+            avg_val_loss = sum(val_losses) / len(val_losses) if val_losses else 0.0
+            val_std = (sum((l - avg_val_loss) ** 2 for l in val_losses) / max(len(val_losses), 1)) ** 0.5
+            overfit_gap = (train_tracker.metrics["loss"].avg - avg_val_loss) if train_tracker.metrics["loss"].count > 0 else 0.0
+            logging.info(f"  val_loss: {avg_val_loss:.4f} (std: {val_std:.4f}, gap: {overfit_gap:.4f})")
+            if wandb_logger:
+                wandb_logger.log_raw({
+                    "loss/val": avg_val_loss,
+                    "loss/val_std": val_std,
+                    "loss/overfit_gap": overfit_gap,
+                }, step)
+            policy.train()
 
         if cfg.save_checkpoint and is_saving_step:
             if is_main_process:
@@ -455,6 +543,31 @@ def train(cfg: TrainPipelineConfig, accelerator: Accelerator | None = None):
                 update_last_checkpoint(checkpoint_dir)
                 if wandb_logger:
                     wandb_logger.log_policy(checkpoint_dir)
+
+            # ── LuckyEngine pick-and-place eval (DISABLED — eval runs locally) ──
+            # To re-enable, uncomment the block below.
+            # if is_main_process:
+            #     try:
+            #         ckpt_dir = get_step_checkpoint_dir(cfg.output_dir, cfg.steps, step) / "pretrained_model"
+            #         le_host = getattr(cfg.env, 'host', '127.0.0.1') if cfg.env else '127.0.0.1'
+            #         le_port = getattr(cfg.env, 'port', 0) if cfg.env else 0
+            #         if getattr(cfg.policy, 'type', None) == "smolvla":
+            #             from luckyengine_eval_smolvla import run_luckyengine_eval
+            #             le_task = getattr(cfg.env, 'task', 'Pick up the red block and place it in the box') if cfg.env else 'Pick up the red block and place it in the box'
+            #             le_result = run_luckyengine_eval(checkpoint_dir=ckpt_dir, host=le_host, port=le_port, n_episodes=1, task=le_task)
+            #         else:
+            #             from luckyengine_eval import run_luckyengine_eval
+            #             le_result = run_luckyengine_eval(checkpoint_dir=ckpt_dir, host=le_host, port=le_port, n_episodes=1)
+            #         epoch = step * cfg.batch_size / dataset.num_frames
+            #         if le_result.get("success"):
+            #             logging.info(f"[LuckyEngine] SUCCESS at step {step} (epoch {epoch:.0f})! rate={le_result['success_rate']:.0%} min_dist={le_result['min_dist']:.4f}m")
+            #         else:
+            #             err_msg = le_result.get('error', '')
+            #             logging.info(f"[LuckyEngine] No success at step {step} (epoch {epoch:.0f}). min_dist={le_result.get('min_dist', '?')}m" + (f" error={err_msg}" if err_msg else ""))
+            #         if wandb_logger:
+            #             wandb_logger.log_raw({"eval/success_rate": le_result.get("success_rate", 0), "eval/min_dist_m": le_result.get("min_dist", 0), "eval/any_success": int(le_result.get("success", False))}, step)
+            #     except Exception as e:
+            #         logging.warning(f"[LuckyEngine] Eval failed (training continues): {e}")
 
             accelerator.wait_for_everyone()
 

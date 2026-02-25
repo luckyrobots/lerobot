@@ -403,7 +403,7 @@ class PiperRoomEnvConfig(EnvConfig):
 
     # gRPC connection
     host: str = "127.0.0.1"
-    port: int = 50051
+    port: int = 50055
     agent_name: str = "agent_0"
     robot_name: str = ""
 

@@ -87,23 +87,28 @@ class TrainPipelineConfig(HubMixin):
             self.policy = PreTrainedConfig.from_pretrained(policy_path, cli_overrides=cli_overrides)
             self.policy.pretrained_path = Path(policy_path)
         elif self.resume:
-            # The entire train config is already loaded, we just need to get the checkpoint dir
-            config_path = parser.parse_arg("config_path")
-            if not config_path:
-                raise ValueError(
-                    f"A config_path is expected when resuming a run. Please specify path to {TRAIN_CONFIG_NAME}"
-                )
+            # If checkpoint_path and pretrained_path are already set (programmatic resume),
+            # skip CLI arg parsing.
+            if self.checkpoint_path is not None and getattr(self.policy, 'pretrained_path', None) is not None:
+                pass
+            else:
+                # The entire train config is already loaded, we just need to get the checkpoint dir
+                config_path = parser.parse_arg("config_path")
+                if not config_path:
+                    raise ValueError(
+                        f"A config_path is expected when resuming a run. Please specify path to {TRAIN_CONFIG_NAME}"
+                    )
 
-            if not Path(config_path).resolve().exists():
-                raise NotADirectoryError(
-                    f"{config_path=} is expected to be a local path. "
-                    "Resuming from the hub is not supported for now."
-                )
+                if not Path(config_path).resolve().exists():
+                    raise NotADirectoryError(
+                        f"{config_path=} is expected to be a local path. "
+                        "Resuming from the hub is not supported for now."
+                    )
 
-            policy_dir = Path(config_path).parent
-            if self.policy is not None:
-                self.policy.pretrained_path = policy_dir
-            self.checkpoint_path = policy_dir.parent
+                policy_dir = Path(config_path).parent
+                if self.policy is not None:
+                    self.policy.pretrained_path = policy_dir
+                self.checkpoint_path = policy_dir.parent
 
         if self.policy is None:
             raise ValueError(
@@ -131,7 +136,7 @@ class TrainPipelineConfig(HubMixin):
 
         if not self.use_policy_training_preset and (self.optimizer is None or self.scheduler is None):
             raise ValueError("Optimizer and Scheduler must be set when the policy presets are not used.")
-        elif self.use_policy_training_preset and not self.resume:
+        elif self.use_policy_training_preset:
             self.optimizer = self.policy.get_optimizer_preset()
             self.scheduler = self.policy.get_scheduler_preset()
 

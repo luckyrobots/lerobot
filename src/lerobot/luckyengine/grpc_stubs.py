@@ -9,6 +9,18 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
+# protobuf 4.x removed MessageFactory.GetPrototype; patch it back so generated
+# stubs produced by older grpcio-tools still import cleanly.  Applied at module
+# level so the fix is in place before any pb2 module is imported.
+try:
+    from google.protobuf import message_factory as _mf_compat
+    if not hasattr(_mf_compat.MessageFactory, "GetPrototype"):
+        _mf_compat.MessageFactory.GetPrototype = (  # type: ignore[attr-defined]
+            lambda self, desc: desc._concrete_class
+        )
+except Exception:
+    pass
+
 
 @dataclass(frozen=True)
 class GeneratedStubs:

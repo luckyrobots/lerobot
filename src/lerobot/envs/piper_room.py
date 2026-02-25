@@ -10,6 +10,7 @@ import logging
 import time
 from typing import Any
 
+import cv2
 import gymnasium as gym
 import numpy as np
 from gymnasium import spaces
@@ -34,7 +35,7 @@ class PiperRoomEnv(gym.Env):
         self,
         *,
         host: str = "127.0.0.1",
-        port: int = 50051,
+        port: int = 50055,
         agent_name: str = "agent_0",
         robot_name: str = "",
         camera_names: tuple[str, ...] = ("CameraGripper", "CameraLeft", "CameraTop"),
@@ -92,8 +93,10 @@ class PiperRoomEnv(gym.Env):
         self._max_episode_steps = episode_length
 
         # Build observation and action spaces
+        # Observation images are resized to 96×96 in _get_obs() to match the
+        # training frame cache FOV, regardless of the gRPC stream resolution.
         pixel_spaces = {
-            cam: spaces.Box(0, 255, shape=(camera_height, camera_width, 3), dtype=np.uint8)
+            cam: spaces.Box(0, 255, shape=(96, 96, 3), dtype=np.uint8)
             for cam in self._camera_names
         }
         self.observation_space = spaces.Dict(
@@ -110,6 +113,7 @@ class PiperRoomEnv(gym.Env):
         self._block_id: int | None = None
         self._block_initial_transform: Any = None
         self._step_count: int = 0
+        self._rng = np.random.default_rng()
 
     # ------------------------------------------------------------------
     # Gymnasium API
@@ -125,7 +129,7 @@ class PiperRoomEnv(gym.Env):
         return obs, {}
 
     def step(self, action: np.ndarray):
-        self._backend.send_control(action.tolist(), robot_name=self._robot_name)
+        self._backend.step(action.tolist(), agent_name=self._agent_name)
         self._step_count += 1
         obs = self._get_obs()
 
@@ -201,12 +205,17 @@ class PiperRoomEnv(gym.Env):
         hold_dt = 1.0 / max(1e-6, self._reset_hz)
         t_end = time.perf_counter() + max(0.0, self._reset_settle_s)
         while time.perf_counter() < t_end:
-            self._backend.send_control(
-                list(map(float, self._home_action)), robot_name=self._robot_name
+            self._backend.step(
+                list(map(float, self._home_action)), agent_name=self._agent_name
             )
             time.sleep(hold_dt)
 
-        # Step 3: teleport block ×2 with 30 ms gap (physics race fix)
+        # Step 3: randomize block position (±3 cm) and teleport ×2
+        self._episode_block_pos = (
+            self._object_reset_pos[0] + self._rng.uniform(-0.03, 0.03),
+            self._object_reset_pos[1] + self._rng.uniform(-0.03, 0.03),
+            self._object_reset_pos[2],
+        )
         self._set_block_pose()
         time.sleep(0.03)
         self._set_block_pose()
@@ -224,10 +233,10 @@ class PiperRoomEnv(gym.Env):
         time.sleep(0.1)
 
     def _set_block_pose(self) -> None:
-        """Teleport the block to the canonical reset position, preserving scale."""
+        """Teleport the block to the episode's randomized position, preserving scale."""
         t = type(self._block_initial_transform)()
         t.CopyFrom(self._block_initial_transform)
-        pos = self._object_reset_pos
+        pos = getattr(self, '_episode_block_pos', self._object_reset_pos)
         quat = self._object_reset_quat
         t.position.x = float(pos[0])
         t.position.y = float(pos[1])
@@ -273,7 +282,9 @@ class PiperRoomEnv(gym.Env):
         pixels: dict[str, np.ndarray] = {}
         for cam in self._camera_names:
             img = raw[f"observation.images.{cam}"]
-            pixels[cam] = np.ascontiguousarray(np.flip(img, axis=0))
+            img = np.ascontiguousarray(np.flip(img, axis=0))
+            img = cv2.resize(img, (96, 96), interpolation=cv2.INTER_LINEAR)
+            pixels[cam] = img
 
         return {"agent_pos": agent_pos, "pixels": pixels}
 

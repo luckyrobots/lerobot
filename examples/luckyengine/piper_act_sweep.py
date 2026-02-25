@@ -147,7 +147,7 @@ def discover_pretrained_models(checkpoints_root: Path) -> list[Path]:
     return dirs
 
 
-def autodetect_hazel_port(host: str, start_port: int = 50051, end_port: int = 50100, timeout_s: float = 0.5) -> int:
+def autodetect_hazel_port(host: str, start_port: int = 50055, end_port: int = 50100, timeout_s: float = 0.5) -> int:
     """
     Find a port that responds to Hazel's SceneService.GetSceneInfo.
     Useful on Windows where 50051 is often taken by another service.

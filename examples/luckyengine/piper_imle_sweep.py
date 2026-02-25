@@ -31,6 +31,89 @@ from lerobot.configs.policies import PreTrainedConfig
 DEFAULT_RED_BLOCK_RESET_POS = (0.317096353, 0.0464101955, 0.000183301046)
 DEFAULT_RED_BLOCK_RESET_POS_CSV = ",".join(str(float(x)) for x in DEFAULT_RED_BLOCK_RESET_POS)
 
+# ── Block spawn randomization (mirrors PiperPickAndPlace.cs) ──────────
+# Coordinate system: Hazel Y-up.  X = forward from base, Z = lateral.
+# Robot base is near origin; home position is (0.42, 0.47, 0.0).
+_SPAWN_FWD_MIN = 0.18   # min forward distance from base
+_SPAWN_FWD_MAX = 0.45   # max forward distance from base
+_SPAWN_LAT_MIN = -0.22  # min lateral offset
+_SPAWN_LAT_MAX = 0.22   # max lateral offset
+_DROPBOX_AVOID_RADIUS = 0.20
+_ROBOT_BASE_AVOID_RADIUS = 0.22
+_DROP_TARGET_AVOID_RADIUS = 0.18
+_SPAWN_SAFETY_MARGIN = 0.02
+_DROP_REGION_HALF_X = 0.085
+_DROP_REGION_HALF_Z = 0.085
+_SPAWN_MAX_ATTEMPTS = 80
+
+
+def _sample_randomized_block_pos(
+    base_pos: np.ndarray,
+    dropbox_pos: np.ndarray | None,
+    default_y: float,
+    rng: np.random.Generator,
+) -> tuple[float, float, float]:
+    """Sample a reachable block position avoiding obstacles (same logic as PiperPickAndPlace.cs).
+
+    All positions are in Hazel Y-up world space: X=forward, Y=up, Z=lateral.
+    """
+    home = np.array([0.42, 0.47, 0.0], dtype=np.float32)
+    fwd = home - base_pos
+    fwd[1] = 0.0  # project to XZ plane
+    norm = np.linalg.norm(fwd)
+    if norm > 1e-6:
+        fwd /= norm
+    else:
+        fwd = np.array([1.0, 0.0, 0.0], dtype=np.float32)
+    right = np.cross(fwd, np.array([0.0, 1.0, 0.0]))
+    right[1] = 0.0
+    norm = np.linalg.norm(right)
+    if norm > 1e-6:
+        right /= norm
+    else:
+        right = np.array([1.0, 0.0, 0.0], dtype=np.float32)
+
+    def _dist_xz(a, b):
+        dx = a[0] - b[0]
+        dz = a[2] - b[2]
+        return math.sqrt(dx * dx + dz * dz)
+
+    def _is_valid(pos):
+        # Reject near robot base
+        if _dist_xz(pos, base_pos) <= _ROBOT_BASE_AVOID_RADIUS + _SPAWN_SAFETY_MARGIN:
+            return False
+        if dropbox_pos is not None:
+            # Reject near dropbox
+            if _dist_xz(pos, dropbox_pos) <= _DROPBOX_AVOID_RADIUS + _SPAWN_SAFETY_MARGIN:
+                return False
+            # Reject inside drop region (axis-aligned box)
+            dx = abs(pos[0] - dropbox_pos[0])
+            dz = abs(pos[2] - dropbox_pos[2])
+            if dx <= _DROP_REGION_HALF_X + _SPAWN_SAFETY_MARGIN and dz <= _DROP_REGION_HALF_Z + _SPAWN_SAFETY_MARGIN:
+                return False
+        return True
+
+    best = base_pos + fwd * ((_SPAWN_FWD_MIN + _SPAWN_FWD_MAX) * 0.5)
+    best[1] = default_y
+    for _ in range(_SPAWN_MAX_ATTEMPTS):
+        candidate = (
+            base_pos
+            + fwd * rng.uniform(_SPAWN_FWD_MIN, _SPAWN_FWD_MAX)
+            + right * rng.uniform(_SPAWN_LAT_MIN, _SPAWN_LAT_MAX)
+        )
+        candidate[1] = default_y
+        best = candidate
+        if _is_valid(candidate):
+            return (float(candidate[0]), float(candidate[1]), float(candidate[2]))
+
+    return (float(best[0]), float(best[1]), float(best[2]))
+
+
+def _random_yaw_quat(rng: np.random.Generator) -> tuple[float, float, float, float]:
+    """Random yaw (rotation around Y in Hazel Y-up space). Returns (x, y, z, w)."""
+    angle = rng.uniform(-math.pi, math.pi)
+    return (0.0, math.sin(angle * 0.5), 0.0, math.cos(angle * 0.5))
+
 
 @dataclass(frozen=True)
 class CheckpointResult:
@@ -434,7 +517,7 @@ def _reset_robot_and_block(
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="Sweep diffusion checkpoints against LuckyEngine Piper-room via Hazel gRPC")
+    ap = argparse.ArgumentParser(description="Sweep IMLE checkpoints against LuckyEngine Piper-room via Hazel gRPC")
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--port", type=int, default=0, help="Hazel gRPC port (0 = auto-detect)")
     ap.add_argument("--proto_path", type=str, default=None, help="Optional explicit path to hazel_rpc.proto")
@@ -449,7 +532,7 @@ def main() -> int:
     ap.add_argument("--agent_name", default="agent_0")
     ap.add_argument("--robot_name", default="")
 
-    # Defaults match training dataset: 30 Hz, 320x240
+    # Defaults match IMLE training dataset: 30 Hz, 320x240
     ap.add_argument("--control_hz", type=float, default=30.0)
     ap.add_argument("--max_steps", type=int, default=300)
     ap.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu")
@@ -546,6 +629,15 @@ def main() -> int:
         type=float,
         default=30.0,
         help="Send rate while holding home_action during reset.",
+    )
+
+    ap.add_argument(
+        "--randomize_block",
+        action="store_true",
+        help=(
+            "Randomize the red block spawn position each trial "
+            "(same reachable region and avoidance constraints as PiperPickAndPlace.cs)."
+        ),
     )
 
     ap.add_argument("--output_dir", type=str, default=".")
@@ -647,8 +739,18 @@ def main() -> int:
 
     if args.limit and args.limit > 0:
         ckpt_dirs = ckpt_dirs[: int(args.limit)]
+    # Evaluate latest checkpoints first (descending order)
+    ckpt_dirs = list(reversed(ckpt_dirs))
     if not ckpt_dirs:
         raise FileNotFoundError(f"No checkpoints found under {args.checkpoints_root}")
+
+    # Read IMLE-specific hyperparameters from first checkpoint config
+    first_cfg_json = load_pretrained_config_json(ckpt_dirs[0])
+    imle_n_obs_steps = first_cfg_json.get("n_obs_steps", "?")
+    imle_horizon = first_cfg_json.get("horizon", "?")
+    imle_n_action_steps = first_cfg_json.get("n_action_steps", "?")
+    imle_n_inference_samples = first_cfg_json.get("n_inference_samples", "?")
+    imle_epsilon = first_cfg_json.get("epsilon", "?")
 
     trials_per_ckpt = max(1, int(getattr(args, "trials_per_checkpoint", 1)))
     total_trials = len(ckpt_dirs) * trials_per_ckpt
@@ -671,6 +773,12 @@ def main() -> int:
     if bool(args.debug_joint_state):
         print(f"    Debug joint state: True (every {int(args.debug_joint_every)} steps)")
     print(f"    Flip for policy: {args.flip_for_policy}")
+    print(f"    Policy type    : IMLE")
+    print(f"    n_obs_steps    : {imle_n_obs_steps}")
+    print(f"    horizon        : {imle_horizon}")
+    print(f"    n_action_steps : {imle_n_action_steps}")
+    print(f"    n_infer_samples: {imle_n_inference_samples}")
+    print(f"    epsilon        : {imle_epsilon}")
 
     port = int(args.port)
     if port == 0:
@@ -722,6 +830,24 @@ def main() -> int:
         red_block_initial_transform = backend.get_entity(tag=args.object_tag).transform
 
     goal_center_offset = _parse_vec3_csv(str(args.goal_center_offset))
+
+    # ── Block randomization setup ──
+    spawn_rng: np.random.Generator | None = None
+    base_pos_np: np.ndarray | None = None
+    dropbox_pos_np: np.ndarray | None = None
+    if args.randomize_block:
+        spawn_rng = np.random.default_rng()
+        try:
+            base_pos_np = backend.get_entity_position(tag="piper")
+        except Exception:
+            base_pos_np = np.array([0.0, 0.0, 0.0], dtype=np.float32)
+            print("  [warn] Could not find 'piper' entity; using origin as robot base.")
+        try:
+            dropbox_pos_np = backend.get_entity_position(tag=args.goal_tag)
+        except Exception:
+            dropbox_pos_np = None
+            print(f"  [warn] Could not find '{args.goal_tag}' entity; dropbox avoidance disabled.")
+        print("    Block randomization: ENABLED (PiperPickAndPlace.cs constraints)")
 
     # Determine policy camera keys:
     # - explicit via --policy_cameras
@@ -784,8 +910,8 @@ def main() -> int:
 
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    jsonl_path = output_dir / "piper_diffusion_sweep.jsonl"
-    csv_path = output_dir / "piper_diffusion_sweep.csv"
+    jsonl_path = output_dir / "piper_imle_sweep.jsonl"
+    csv_path = output_dir / "piper_imle_sweep.csv"
 
     results: list[CheckpointResult] = []
     trial_counter = 0
@@ -837,13 +963,26 @@ def main() -> int:
             # and the simulation continues stepping; resetting early can allow the block
             # to drift or get bumped before the first control step.
             if do_reset:
+                # Determine block pose for this trial
+                trial_object_pos = forced_object_pos
+                trial_object_quat = forced_object_quat
+                if args.randomize_block and spawn_rng is not None and forced_object_pos is not None:
+                    trial_object_pos = _sample_randomized_block_pos(
+                        base_pos=base_pos_np,
+                        dropbox_pos=dropbox_pos_np,
+                        default_y=forced_object_pos[1],
+                        rng=spawn_rng,
+                    )
+                    trial_object_quat = _random_yaw_quat(spawn_rng)
+                    print(f"  Randomized block pos: ({trial_object_pos[0]:.4f}, {trial_object_pos[1]:.4f}, {trial_object_pos[2]:.4f})")
+
                 print("  Resetting robot and block...")
                 _reset_robot_and_block(
                     backend,
                     red_block_id=red_block_id,
                     red_block_initial_transform=red_block_initial_transform,
-                    forced_object_pos=forced_object_pos,
-                    forced_object_quat=forced_object_quat,
+                    forced_object_pos=trial_object_pos,
+                    forced_object_quat=trial_object_quat,
                     home_action=args.home_action,
                     robot_name=args.robot_name,
                     reset_settle_s=float(args.reset_settle_s),
@@ -941,6 +1080,16 @@ def main() -> int:
                                 if bool(args.allow_black_images) or not _frame_is_all_black_u8_rgb(frame):
                                     frame_flipped = np.flip(frame, axis=0)  # fix vertical flip from GPU readback
                                     video_writer.append_data(frame_flipped)
+
+                    # Resize images to 96x96 to match training resolution
+                    # (training used pre-decoded 96x96 mmap cache frames)
+                    for _k in list(obs.keys()):
+                        if "image" in _k:
+                            _img = torch.from_numpy(obs[_k]).permute(2, 0, 1).unsqueeze(0).float()
+                            _img = torch.nn.functional.interpolate(
+                                _img, size=(96, 96), mode="bilinear", align_corners=False
+                            )
+                            obs[_k] = _img.squeeze(0).permute(1, 2, 0).byte().numpy()
 
                     action_t = predict_action(
                         observation=obs,

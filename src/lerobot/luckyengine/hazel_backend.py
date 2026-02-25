@@ -33,9 +33,9 @@ class HazelBackend:
         self,
         *,
         host: str = "127.0.0.1",
-        port: int = 50051,
+        port: int = 50055,
         proto_path: str | Path | None = None,
-        timeout_s: float = 5.0,
+        timeout_s: float = 10.0,
     ) -> None:
         self._host = host
         self._port = int(port)
@@ -269,6 +269,26 @@ class HazelBackend:
         )
         if not getattr(resp, "success", False):
             raise RuntimeError(f"SendControl rejected: {getattr(resp, 'message', '')}")
+
+    def step(self, actions: Sequence[float], *, agent_name: str = "agent_0", timeout_ms: int = 0):
+        """Synchronous RL step: apply action, advance physics, return observation.
+
+        Uses AgentService.Step which is the recommended interface for PiperLego scenes.
+        SendControl only buffers actions; Step actually applies them and advances the sim.
+        """
+        if self._agent is None:
+            raise RuntimeError("Backend not connected. Call connect() first.")
+        resp = self._agent.Step(
+            self._pb2.StepRequest(
+                agent_name=agent_name,
+                actions=list(map(float, actions)),
+                timeout_ms=int(timeout_ms),
+            ),
+            timeout=self._timeout_s,
+        )
+        if not getattr(resp, "success", False):
+            raise RuntimeError(f"Step failed: {getattr(resp, 'message', '')}")
+        return resp
 
     def get_joint_state(self, *, robot_name: str = "") -> tuple[np.ndarray, np.ndarray]:
         """
