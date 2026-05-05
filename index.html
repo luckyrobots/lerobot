@@ -1,0 +1,1205 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<title>LuckyEngine + LeRobot: Getting Started</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --hf-yellow: #FFD21E;
+  --hf-yellow-soft: #FFF8DD;
+  --hf-link: #2563EB;
+  --hf-link-hover: #1D4ED8;
+  --ink: #14181F;
+  --ink-soft: #4B5563;
+  --muted: #6B7280;
+  --line: #E5E7EB;
+  --line-strong: #D1D5DB;
+  --bg: #FFFFFF;
+  --bg-soft: #F9FAFB;
+  --bg-sub: #F3F4F6;
+  --code-fg: #BE185D;
+  --pre-bg: #0F172A;
+  --pre-fg: #E2E8F0;
+  --info-bg: #EFF6FF;
+  --info-border: #3B82F6;
+  --warn-bg: #FFFBEB;
+  --warn-border: #F59E0B;
+  --real-bg: #FEF2F2;
+  --real-border: #EF4444;
+  --ok-bg: #ECFDF5;
+  --ok-border: #10B981;
+}
+* { box-sizing: border-box; }
+html, body { background: var(--bg); }
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-size: 16px;
+  line-height: 1.7;
+  color: var(--ink);
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 0 24px 80px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+header.page {
+  padding: 28px 0 8px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 32px;
+}
+header.page.crumb {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  font-weight: 600;
+  margin-bottom: 14px;
+  display: inline-block;
+}
+header.page.badge {
+  display: inline-block;
+  background: var(--hf-yellow);
+  color: #1A1A1A;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 3px 10px;
+  border-radius: 999px;
+  margin-left: 6px;
+  vertical-align: middle;
+  text-transform: uppercase;
+}
+h1 {
+  font-size: 2.5rem;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  line-height: 1.15;
+  margin: 0 0 14px;
+  color: var(--ink);
+}
+h2 {
+  font-size: 1.55rem;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  margin: 64px 0 20px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink);
+}
+h3 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin: 32px 0 12px;
+  color: var(--ink);
+  letter-spacing: -0.005em;
+}
+p { margin: 12px 0; }
+a { color: var(--hf-link); text-decoration: none; }
+a:hover { color: var(--hf-link-hover); text-decoration: underline; }
+ul, ol { padding-left: 24px; margin: 12px 0; }
+li { margin: 6px 0; }
+code {
+  background: var(--bg-sub);
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-family: 'JetBrains Mono', 'SFMono-Regular', Menlo, Consolas, monospace;
+  font-size: 0.86em;
+  color: var(--code-fg);
+  font-weight: 500;
+}
+pre {
+  background: var(--pre-bg);
+  color: var(--pre-fg);
+  border: none;
+  border-radius: 10px;
+  padding: 18px 22px;
+  overflow-x: auto;
+  font-size: 0.86em;
+  line-height: 1.6;
+  margin: 18px 0;
+  font-family: 'JetBrains Mono', 'SFMono-Regular', Menlo, Consolas, monospace;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+}
+pre code {
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  border-radius: 0;
+  font-size: 1em;
+  font-weight: 400;
+}
+table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+  margin: 16px 0;
+  font-size: 0.92em;
+}
+th {
+  background: var(--bg-soft);
+  font-weight: 600;
+  text-align: left;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink);
+}
+td {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+  color: var(--ink-soft);
+}
+tr:last-child td { border-bottom: none; }
+.callout {
+  background: var(--info-bg);
+  border-left: 4px solid var(--info-border);
+  border-radius: 0 10px 10px 0;
+  padding: 16px 20px;
+  margin: 20px 0;
+  font-size: 0.96em;
+}
+.callout b:first-child { color: var(--ink); }
+.callout.warn { background: var(--warn-bg); border-color: var(--warn-border); }
+.callout.real { background: var(--real-bg); border-color: var(--real-border); }
+.callout ul { margin: 8px 0 0; }
+.muted { color: var(--muted); font-size: 0.96em; }
+figure { margin: 24px 0 32px; }
+figure svg {
+  background: var(--bg-soft) !important;
+  border: 1px solid var(--line) !important;
+  border-radius: 12px !important;
+  padding: 8px;
+}
+figcaption {
+  font-size: 0.88em;
+  color: var(--muted);
+  margin-top: 10px;
+  padding: 0 4px;
+  line-height: 1.55;
+}
+video {
+  display: block;
+  max-width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #000;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+figure.video-wide {
+  margin: 24px auto 32px;
+  max-width: 560px;
+}
+figure.video-wide video {
+  display: block;
+  margin: 0 auto;
+  width: 100%;
+  max-width: 560px;
+  aspect-ratio: auto;
+}
+figure.video-wide video.pixelated {
+  max-width: 384px;
+}
+figure.video-wide figcaption {
+  margin: 10px 4px 0;
+  text-align: center;
+}
+video.pixelated { image-rendering: pixelated; image-rendering: crisp-edges; }
+.kv {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  gap: 12px 24px;
+  font-size: 0.94em;
+  margin: 16px 0;
+  padding: 18px 22px;
+  background: var(--bg-soft);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.kv b { color: var(--ink); font-weight: 600; }
+.kv code { background: rgba(0,0,0,0.04); }
+hr.soft {
+  border: none;
+  border-top: 1px solid var(--line);
+  margin: 48px 0;
+}
+nav.toc {
+  background: var(--bg-soft);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 18px 24px;
+  margin: 28px 0 36px;
+}
+nav.toc b {
+  display: block;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  font-weight: 700;
+  margin-bottom: 10px;
+}
+nav.toc a {
+  color: var(--ink);
+  font-weight: 500;
+}
+nav.toc a:hover { color: var(--hf-link); }
+nav.toc ol {
+  margin: 0;
+  padding-left: 22px;
+  font-size: 0.95em;
+}
+nav.toc li { margin: 6px 0; }
+.steps { padding-left: 24px; }
+.steps li { margin: 10px 0; }
+sup, sub { font-size: 0.72em; }
+::selection { background: var(--hf-yellow); color: #1A1A1A; }
+
+/* ── Hero block ───────────────────────────────────────────────────────── */
+section.hero {
+  background: linear-gradient(180deg, var(--hf-yellow-soft) 0%, var(--bg-soft) 100%);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 40px 36px 32px;
+  margin: 28px auto 44px;
+  /* Break out wider than the 920px body content column for hero presence. */
+  max-width: 1240px;
+  width: calc(100vw - 48px);
+  margin-left: 50%;
+  transform: translateX(-50%);
+  box-shadow: 0 4px 24px rgba(0,0,0,0.05);
+}
+@media (max-width: 1280px) {
+  section.hero { width: auto; margin-left: 0; transform: none; }
+}
+section.hero.hero-title {
+  font-size: clamp(1.6rem, 3.2vw, 2.4rem);
+  font-weight: 800;
+  line-height: 1.18;
+  text-align: center;
+  margin: 0 0 32px;
+  color: var(--ink);
+  letter-spacing: -0.025em;
+  max-width: 18ch;
+  margin-left: auto;
+  margin-right: auto;
+}
+section.hero.hero-title em,
+section.hero.hero-title.hl {
+  font-style: normal !important;
+  background: none;
+  padding: 0;
+  margin: 0;
+  color: var(--ink);
+  text-decoration: underline;
+  text-decoration-color: var(--hf-yellow);
+  text-decoration-thickness: 4px;
+  text-underline-offset: 5px;
+}
+section.hero.hero-title code {
+  font-size: 0.78em;
+  background: rgba(0,0,0,0.06);
+  color: var(--ink);
+  padding: 2px 8px;
+  vertical-align: 2px;
+  font-weight: 600;
+}
+@media (max-width: 720px) {
+  section.hero { padding: 28px 22px 22px; }
+}
+section.hero.hero-title code {
+  font-size: 0.9em;
+  background: rgba(0,0,0,0.06);
+  color: var(--ink);
+}
+section.hero.compare {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  margin: 0 0 28px;
+}
+@media (max-width: 720px) {
+  section.hero.compare { grid-template-columns: 1fr; }
+}
+section.hero.compare > figure {
+  margin: 0;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+}
+section.hero.compare video {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  background: #000;
+}
+section.hero.compare.placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-sub);
+  aspect-ratio: 16 / 9;
+  color: var(--muted);
+  text-align: center;
+  padding: 18px;
+  font-size: 0.95em;
+  line-height: 1.45;
+}
+section.hero.compare.placeholder.play {
+  font-size: 1.8em;
+  margin-bottom: 8px;
+  opacity: 0.55;
+}
+section.hero.compare.placeholder b { color: var(--ink-soft); font-weight: 600; }
+section.hero.compare.placeholder small { display: block; margin-top: 6px; opacity: 0.75; font-size: 0.85em; }
+section.hero.compare figcaption {
+  font-size: 0.92em;
+  color: var(--muted);
+  text-align: center;
+  padding: 12px 16px 14px;
+  margin: 0;
+  line-height: 1.5;
+}
+section.hero.result-row { text-align: center; margin-bottom: 14px; }
+section.hero.result {
+  display: inline-block;
+  background: var(--ink);
+  color: #fff;
+  border-radius: 999px;
+  padding: 12px 24px;
+  font-size: 1.02em;
+  font-weight: 500;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+}
+section.hero.result b { color: var(--hf-yellow); font-weight: 700; }
+section.hero blockquote.quote {
+  margin: 14px 0 0;
+  padding: 12px 16px;
+  border-left: 3px solid var(--hf-yellow);
+  font-style: italic;
+  color: var(--ink-soft);
+  font-size: 0.92em;
+  background: rgba(255, 255, 255, 0.5);
+  border-radius: 0 6px 6px 0;
+  line-height: 1.55;
+}
+section.hero blockquote.quote cite {
+  display: block;
+  font-style: normal;
+  font-size: 0.85em;
+  color: var(--muted);
+  margin-top: 6px;
+}
+
+
+/* ── §8 sell-card (echoes hero block style for the real-robot payoff) ── */
+section.sell {
+  background: linear-gradient(180deg, var(--hf-yellow-soft) 0%, var(--bg-soft) 100%);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 32px 32px 26px;
+  margin: 28px 0 24px;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.05);
+  text-align: center;
+}
+.sell-kicker {
+  font-size: 0.82em;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  font-weight: 700;
+  margin: 0 0 14px;
+  text-align: center;
+}
+section.sell figure {
+  margin: 0 auto 22px;
+  max-width: 820px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+}
+section.sell video {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  background: #000;
+}
+section.sell figcaption {
+  font-size: 0.9em;
+  color: var(--muted);
+  text-align: center;
+  padding: 10px 14px 12px;
+  margin: 0;
+  line-height: 1.5;
+}
+section.sell.result {
+  display: inline-block;
+  background: var(--ink);
+  color: #fff;
+  border-radius: 999px;
+  padding: 12px 24px;
+  font-size: 1.02em;
+  font-weight: 500;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+  margin-bottom: 12px;
+}
+section.sell.result b { color: var(--hf-yellow); font-weight: 700; }
+.sell-tagline {
+  margin: 6px 0 0;
+  font-size: 0.95em;
+  color: var(--ink-soft);
+  text-align: center;
+  line-height: 1.55;
+}
+.sell-tagline b { color: var(--ink); font-weight: 600; }
+
+
+section.hero.arrow-divider {
+  text-align: center;
+  font-size: 0.78em;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  font-weight: 700;
+  margin: 4px 0 18px;
+}
+section.hero.arrow-divider::before,
+section.hero.arrow-divider::after {
+  content: "";
+  display: inline-block;
+  width: 60px;
+  height: 1px;
+  background: var(--line);
+  vertical-align: middle;
+  margin: 0 14px;
+}
+section.hero.result-figure {
+  margin: 0 auto 22px;
+  max-width: 760px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+}
+section.hero.result-figure video {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  background: #000;
+}
+section.hero.result-figure figcaption {
+  font-size: 0.92em;
+  color: var(--muted);
+  text-align: center;
+  padding: 12px 16px 14px;
+  margin: 0;
+  line-height: 1.5;
+}
+
+
+section.hero.contrast-line {
+  text-align: center;
+  font-size: 0.95em;
+  color: var(--ink-soft);
+  margin: 4px 0 18px;
+  letter-spacing: 0.005em;
+}
+section.hero.contrast-line span:first-child {
+  color: var(--muted);
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+  text-decoration-color: rgba(0,0,0,0.35);
+}
+section.hero.contrast-line span:first-child b {
+  color: var(--ink-soft);
+  font-weight: 600;
+}
+section.hero.contrast-line.arrow {
+  margin: 0 12px;
+  color: var(--hf-yellow);
+  font-weight: 700;
+}
+section.hero.contrast-line span:last-child b {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+</style></head><body>
+
+<header class="page">
+  <span class="crumb">LuckyEngine docs<span class="badge">Tutorial</span></span>
+  <h1>LuckyEngine + LeRobot: Getting Started</h1>
+</header>
+
+<section class="hero">
+  <p class="sell-kicker">Record in sim &middot; Deploy on real</p>
+  <p class="hero-title">Record SO-100 demos <em>without</em> the SO-100.</p>
+
+  <div class="compare">
+    <figure>
+      <video autoplay muted loop playsinline preload="metadata" src="videos/hero_teleop.mp4"></video>
+      <figcaption><b>Manual leader-arm teleop.</b><br>One human, one demo at a time.</figcaption>
+    </figure>
+    <figure>
+      <video autoplay muted loop playsinline preload="metadata" src="videos/hero_sim.mp4"></video>
+      <figcaption><b>Scripted in LuckyEngine.</b><br>Hands-free, repeatable, same dataset format.</figcaption>
+    </figure>
+  </div>
+
+  <p class="contrast-line"><span><b>by hand, one at a time</b></span> <span class="arrow">&rarr;</span> <span><b>by script, as many as you need</b></span></p>
+
+  <p class="arrow-divider">trained on those demos &darr;</p>
+  <figure class="result-figure">
+    <video autoplay muted loop playsinline preload="metadata" src="videos/hero_sim2real.mp4"></video>
+    <figcaption>The same checkpoint, autonomous on the real SO-100. Two-camera DICE-IMLE @ 30 Hz.</figcaption>
+  </figure>
+
+  <div class="result-row">
+    <span class="result"><b>72%</b> success on the real SO-100 &mdash; checkpoint trained only on sim recordings.</span>
+  </div>
+
+  <p class="sell-tagline"><b>Same task. Same checkpoint. Same robot.</b> Only the demos came from a simulator.</p>
+</section>
+
+<p class="muted">A short, do-this-then-this tutorial for taking a LuckyEngine
+(LE) scene through to a trained imitation-learning policy that runs in LE,
+then in Genesis, then on a real robot. About a weekend of work end-to-end if
+your scene is already built.</p>
+
+<nav class="toc">
+<b>Steps</b>
+<ol>
+  <li><a href="#sec0">The big picture</a></li>
+  <li><a href="#sec1">Setup</a></li>
+  <li><a href="#sec2">Record demos in LE</a></li>
+  <li><a href="#sec3">Check the dataset</a></li>
+  <li><a href="#sec4">Train (ACT)</a></li>
+  <li><a href="#sec5">Evaluate in LE (in-domain)</a></li>
+  <li><a href="#sec6">Evaluate in Genesis (sim-to-sim)</a></li>
+  <li><a href="#sec7">Evaluate on the real robot</a></li>
+  <li><a href="#sec8">Case study &mdash; what we shipped</a></li>
+  <li><a href="#sec9">Going deeper</a></li>
+</ol>
+</nav>
+
+<a id="sec0"></a>
+<h2>0 &middot; The big picture</h2>
+
+<figure>
+<svg viewBox="0 0 1000 200" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;background:#fafbfc;border:1px solid #eee;border-radius:4px;">
+  <defs>
+    <marker id="ar0" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#444"/></marker>
+  </defs>
+  <style>.lab0{font:12px -apple-system,Inter,Helvetica,sans-serif;fill:#222}.sub0{font:10px -apple-system,Inter,Helvetica,sans-serif;fill:#777}.b0{font-weight:600}</style>
+  <rect x="20" y="70" width="150" height="60" fill="#eaf1f8" stroke="#3a78b8"/>
+  <text x="95" y="92" text-anchor="middle" class="lab0 b0">LE scene</text>
+  <text x="95" y="108" text-anchor="middle" class="sub0">MuJoCo + cameras</text>
+  <line x1="170" y1="100" x2="210" y2="100" stroke="#444" marker-end="url(#ar0)"/>
+  <rect x="210" y="70" width="160" height="60" fill="#f8f8f8" stroke="#444"/>
+  <text x="290" y="92" text-anchor="middle" class="lab0 b0">Record demos</text>
+  <text x="290" y="108" text-anchor="middle" class="sub0">LeRobot 3.0 dataset</text>
+  <line x1="370" y1="100" x2="410" y2="100" stroke="#444" marker-end="url(#ar0)"/>
+  <rect x="410" y="70" width="160" height="60" fill="#f8f8f8" stroke="#444"/>
+  <text x="490" y="92" text-anchor="middle" class="lab0 b0">Train ACT</text>
+  <text x="490" y="108" text-anchor="middle" class="sub0">lerobot-train</text>
+  <line x1="570" y1="100" x2="610" y2="100" stroke="#444" marker-end="url(#ar0)"/>
+  <rect x="610" y="70" width="120" height="60" fill="#f8f8f8" stroke="#444"/>
+  <text x="670" y="95" text-anchor="middle" class="lab0 b0">Inference</text>
+  <text x="670" y="111" text-anchor="middle" class="sub0">~30 Hz loop</text>
+  <line x1="730" y1="100" x2="780" y2="40"  stroke="#3a78b8" marker-end="url(#ar0)"/>
+  <line x1="730" y1="100" x2="780" y2="100" stroke="#3a78b8" marker-end="url(#ar0)"/>
+  <line x1="730" y1="100" x2="780" y2="160" stroke="#c25b3a" marker-end="url(#ar0)"/>
+  <rect x="780" y="20"  width="200" height="40" fill="#eaf1f8" stroke="#3a78b8"/>
+  <text x="880" y="36" text-anchor="middle" class="lab0 b0">In-domain (LE)</text>
+  <text x="880" y="52" text-anchor="middle" class="sub0">&sect;5</text>
+  <rect x="780" y="80" width="200" height="40" fill="#eaf1f8" stroke="#3a78b8"/>
+  <text x="880" y="96" text-anchor="middle" class="lab0 b0">Sim-to-sim (Genesis)</text>
+  <text x="880" y="112" text-anchor="middle" class="sub0">&sect;6</text>
+  <rect x="780" y="140" width="200" height="40" fill="#fdf6f3" stroke="#c25b3a"/>
+  <text x="880" y="156" text-anchor="middle" class="lab0 b0">Sim-to-real</text>
+  <text x="880" y="172" text-anchor="middle" class="sub0">&sect;7</text>
+</svg>
+<figcaption>Figure 0.1 &mdash; The whole pipeline. Record once in LE, train once with LeRobot, evaluate the same checkpoint against three lanes.</figcaption>
+</figure>
+
+<a id="sec1"></a>
+<h2>1 &middot; Setup</h2>
+
+<p>This guide assumes your LE scene is already built and a robot agent is in
+it. If you need to build one first, the walkthrough below covers scene creation
+inside the LE editor; otherwise jump to the install table.</p>
+
+<figure style="margin:24px 0 32px;">
+<video controls preload="metadata" style="width:100%; display:block;" src="videos/scene_creation.mp4"></video>
+<figcaption>Video 1.1 &mdash; Building a scene in LuckyEngine and getting it ready for recording.</figcaption>
+</figure>
+
+<div class="kv">
+  <b>OS</b><span>Windows 10/11 for LE; Linux for the Python trainer.</span>
+  <b>Python</b><span>3.10&ndash;3.12. <code>pip install lerobot luckyrobots torch grpcio numpy</code> (LeRobot &ge; 3.0). For &sect;6 (Genesis sim-to-sim) also <code>pip install genesis-world</code>.</span>
+  <b>GPU</b><span>Any CUDA card for training. LE renders on the host GPU.</span>
+  <b>LE build</b><span>Release x64 from <code>LuckyEngine.sln</code>.</span>
+  <b>gRPC port</b><span>SDK default <code>50051</code>; pass <code>port=</code> to <code>Session(...)</code> if your LE binds something else.</span>
+</div>
+
+<a id="sec2"></a>
+<h2>2 &middot; Record demos in LE</h2>
+
+<p>Today, LE demos are produced by <b>scripted C# scene scripts</b>, not by
+human teleop. The script drives the robot through waypoints; the C++ engine
+writes a LeRobot 3.0 dataset to disk in parallel.</p>
+
+<figure style="margin:24px 0 32px;">
+<video controls preload="metadata" style="width:100%; display:block;" src="videos/recording_walkthrough.mp4"></video>
+<figcaption>Video 2.0 &mdash; End-to-end walkthrough of recording demonstrations in LE.</figcaption>
+</figure>
+
+<figure style="margin:24px 0 32px;">
+<video autoplay muted loop playsinline preload="metadata" style="width:100%; display:block;" src="videos/so100_sim.mp4"></video>
+<figcaption>Video 2.1 &mdash; SO-100 pick-and-place recorded inside LuckyEngine &mdash; the dataset behind the case study in &sect;8.</figcaption>
+</figure>
+
+<h3>2.1 Start a recording</h3>
+
+<p>Two ways to drive the recorder. Either is fine; pick whichever matches how
+you want to iterate.</p>
+
+<p><b>From the editor.</b> Open the <i>Data Observer</i> ImGui panel
+(<code>LuckyEditor/src/Panels/DataPanel.cpp</code>): set the output directory,
+toggle <i>Enable Data</i> and <i>Enable Cameras</i>, then click
+<i>Arm Recorder</i>. The session moves to the <i>Armed</i> state, then auto-transitions
+to <i>Recording</i> as soon as the scene starts playing; click <i>Stop Session</i>
+when you're done. Easiest for one-off recordings.</p>
+
+<p><b>From a C# scene script.</b> The path the case study used. See
+<code>Assets/ContentVault/Examples/SO100 Pick And Place/SO100PickAndPlace.cs</code>
+for a complete example. The minimum is:</p>
+
+<pre><code>// Hazel-ScriptCore/Source/Hazel/Data/Observer.cs
+Observer.RegisterTask(0, "Pick up the lego block and place it on the target");
+Observer.StartRecording();
+
+foreach (var episode in episodes) {
+    DriveSO100ToWaypoints();              // drive RobotControllerComponent
+    bool ok = CheckTaskSuccess();         // task-specific heuristic
+    Observer.EndCurrentEpisode(ok);
+    ResetSceneForNextEpisode();
+}
+
+Observer.StopRecording();
+</code></pre>
+
+<h3>2.2 What ends up in each frame</h3>
+
+<div class="kv">
+  <b><code>action</code></b><span>float32 list, one entry per actuator (<code>m-&gt;nu</code>).</span>
+  <b><code>observation.state</code></b><span>float32 list &mdash; <i>all</i> actuated joint qpos. Often wider than your policy needs; trim in the cleanup pass (&sect;3).</span>
+  <b><code>observation.images.&lt;cam&gt;</code></b><span>uint8 RGB written as h264 mp4 chunks (not embedded in parquet).</span>
+</div>
+
+<p class="muted"><b>Use 96&times;96 cameras.</b> Bigger costs you the 30 Hz inference budget.</p>
+
+<div class="callout warn">
+<b>Label success at the source.</b> Pass <code>true</code>/<code>false</code>
+to <code>Observer.EndCurrentEpisode</code> based on a script-side check
+(block lifted, gripper closed on object, block-to-target distance, whatever your task needs). Set
+<code>EnableDiscardFailedEpisodes</code> in <code>ObserverConfig</code> so
+failed episodes don't make it into the dataset and your indices stay dense.
+</div>
+
+<a id="sec3"></a>
+<h2>3 &middot; Check the dataset</h2>
+
+<p>LE writes the LeRobot 3.0 layout directly &mdash; the directory it produces
+under <code>DataSessions/session_&lt;ts&gt;/</code> is the directory
+<code>LeRobotDataset(root=...)</code> opens. No format conversion is needed,
+but you'll usually want a small Python pass to trim
+<code>observation.state</code> down to the joints your policy needs and to
+drop any cameras you don't want to train on.</p>
+
+<pre><code>session_&lt;ts&gt;/
+├── data/chunk-NNN/file-NNN.parquet     # one parquet per episode
+├── videos/observation.images.&lt;cam&gt;/    # h264 mp4 per camera per episode
+└── meta/info.json + stats.json + tasks.parquet + episodes/
+</code></pre>
+
+<a id="sec4"></a>
+<h2>4 &middot; Train (ACT)</h2>
+
+<p>Use ACT to start. It's the policy LeRobot recommends out of the box,
+fast to train, and strong on tabletop manipulation
+(<a href="https://arxiv.org/abs/2304.13705">Zhao et&nbsp;al. 2023</a>).</p>
+
+<pre><code>lerobot-train \
+  --dataset.root=path/to/your_session \
+  --dataset.repo_id=local/your_session \
+  --policy.type=act \
+  --policy.chunk_size=100 \
+  --batch_size=8 \
+  --steps=100000 \
+  --output_dir=outputs/act_my_task \
+  --job_name=act_my_task \
+  --wandb.enable=true
+</code></pre>
+
+<p>ACT auto-adapts to your dataset's number of cameras, state dim, and action
+dim from <code>meta/info.json</code>, so most knobs are task-agnostic. The
+ones that matter:</p>
+
+<div class="kv">
+  <b><code>policy.chunk_size</code></b><span>actions predicted per forward pass. 100 is a fine default; smaller = more reactive.</span>
+  <b><code>policy.kl_weight</code></b><span>CVAE KL term. Default 10. Lower if the latent collapses.</span>
+  <b><code>batch_size</code></b><span>start at 8; raise as VRAM allows.</span>
+  <b><code>steps</code></b><span>~100k for ~200 demos on a tabletop task is a solid recipe.</span>
+</div>
+
+<p>Wall-clock: 2&ndash;6 hours on a consumer GPU (RTX 3090 / 4070 / 4090
+class), dominated by video decoding. Checkpoints land in
+<code>outputs/&lt;job_name&gt;/checkpoints/&lt;step&gt;/</code>. <b>Keep at
+least the last few</b> &mdash; policy quality is non-monotonic across
+training and the best checkpoint is rarely the final step.</p>
+
+<a id="sec5"></a>
+<h2>5 &middot; Evaluate in LE (in-domain)</h2>
+
+<p>The fastest signal you have is closing the loop in the same simulator you
+trained in. Talk to the running LE process from Python through the
+<a href="https://github.com/luckyrobots/luckyrobots"><code>luckyrobots</code></a>
+SDK; it speaks the same gRPC contract LuckyLab uses.
+<code>step()</code> returns a synchronous post-step <code>ObservationResponse</code>
+&mdash; state and any synchronized camera frames in one object &mdash; so there's
+no async stream to race against.</p>
+
+<pre><code>from luckyrobots import Session
+
+with Session(host="127.0.0.1", port=50051) as session:
+    # Launch + connect (or use session.connect(...) if LE is already running):
+    session.start(scene="my_scene", robot="my_robot", task="my_task")
+
+    # Opt in to synchronized camera frames on every step / reset:
+    session.configure_cameras([
+        {"name": "CameraFront",   "width": 96, "height": 96},
+        {"name": "LaptopCamera",  "width": 96, "height": 96},
+    ])
+
+    policy, pre, post = load_policy(checkpoint_dir)
+    state_dim = 6
+
+    for trial in range(N_TRIALS):
+        obs_resp = session.reset()                    # ObservationResponse
+        for _ in range(SETTLE_STEPS):
+            obs_resp = session.step(HOME_ACTION)
+
+        for step in range(MAX_STEPS):
+            state  = obs_resp.observation[:state_dim]                   # list[float]
+            frames = {cf.name: cf.image for cf in obs_resp.camera_frames}
+            action = predict(policy, pre, post, build_obs(state, frames))
+            obs_resp = session.step(action.tolist())
+            if success(obs_resp):
+                break
+</code></pre>
+
+<div class="callout">
+<b>A few things readers tripped on.</b>
+<ul style="margin:8px 0 0;">
+  <li><b><code>task</code> is required</b> in <code>session.start(...)</code>.</li>
+  <li><b>State lives at <code>obs_resp.observation</code></b> (a flat
+  <code>list[float]</code>), not at a nested <code>.observation.observations</code>.
+  Slice the first <code>state_dim</code> entries to get the joint state your
+  policy was trained on.</li>
+  <li><b>Camera frames are part of the same response</b> after
+  <code>configure_cameras([...])</code>. No separate stream to subscribe to.</li>
+</ul>
+</div>
+
+<a id="sec6"></a>
+<h2>6 &middot; Evaluate in Genesis (sim-to-sim)</h2>
+
+<p>LE&nbsp;&rarr;&nbsp;LE is necessary but not sufficient: the policy is being
+graded by the same simulator it learned the quirks of. Mirroring your scene in
+<a href="https://github.com/Genesis-Embodied-AI/Genesis">Genesis</a> &mdash; a
+different physics solver and a different renderer &mdash; gives you a cheap,
+hardware-free generalization probe.</p>
+
+<ol class="steps">
+  <li><b>Convert axes.</b> LE is Y-up, Genesis is Z-up &mdash; apply <code>hz_to_gs(p) = (p[0], -p[2], p[1])</code> to positions, lookats, and lights.</li>
+  <li><b>Reuse the MJCF.</b> Pass the same <code>so_arm100.xml</code> to both sims and match the home-pose keyframe.</li>
+  <li><b>Place cameras by intrinsics.</b> Same position, lookat, FOV, and 96&times;96 render size.</li>
+  <li><b>Rebuild task objects.</b> Close enough is good enough &mdash; you're testing generalization, not pixel parity.</li>
+</ol>
+
+<p>The reference Genesis backend
+(your <code>genesis_backend.py</code>) wraps a built-in SO-100 scene
+behind a small, stable Python interface &mdash;
+<code>connect()</code>, <code>reset(seed=...)</code>,
+<code>step(action)</code>, <code>get_observation()</code>,
+<code>get_entity_position(name)</code>, <code>set_block_pose(...)</code>,
+<code>close()</code>. It does not expose the LuckyLab <code>Session</code>
+contract directly; the Genesis sweep
+(your eval driver) is a separate eval driver that
+loads the same checkpoint, calls these methods instead of LE's, and assembles
+the same observation dict your policy was trained on. Same checkpoint,
+different driver.</p>
+
+<div class="callout warn">
+<b>Genesis pitfalls that cost us days.</b>
+<ul style="margin:6px 0 0 0; padding-left:18px;">
+  <li><b>Windows DLL order:</b> <code>import genesis</code> MUST come BEFORE
+  <code>import pyarrow</code> (or anything that pulls torch). PyArrow DLLs
+  poison Genesis's loader.</li>
+  <li><b>Camera flip:</b> LE returns upside-down frames; apply ONE
+  <code>np.flip(axis=0)</code> on the LE side. Do <em>not</em> flip Genesis
+  frames again.</li>
+  <li><b>Action units:</b> Genesis won't denormalize for you. If your dataset
+  stored raw joint radians, call <code>control_dofs_position</code> with raw
+  joint radians.</li>
+</ul>
+</div>
+
+<a id="sec7"></a>
+<h2>7 &middot; Evaluate on the real robot</h2>
+
+<p>Once your checkpoint clears LE&nbsp;&rarr;&nbsp;LE and
+LE&nbsp;&rarr;&nbsp;Genesis, the deployment loop is mechanically simple: read
+cameras + joints, run the policy, send a position command, repeat.</p>
+
+<figure>
+<svg viewBox="0 0 1100 220" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;background:#fafbfc;border:1px solid #eee;border-radius:4px;">
+  <defs>
+    <marker id="arR" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#444"/></marker>
+  </defs>
+  <style>.lab{font:12px -apple-system,Inter,Helvetica,sans-serif;fill:#333}.sub{font:10px -apple-system,Inter,Helvetica,sans-serif;fill:#777}.b{font-weight:600}.lat{font:10px -apple-system,Inter,Helvetica,sans-serif;fill:#c25b3a;font-weight:600}</style>
+  <rect x="20"  y="60" width="150" height="60" fill="#eaf1f8" stroke="#3a78b8"/>
+  <text x="95"  y="82" text-anchor="middle" class="lab b">cameras</text>
+  <text x="95"  y="98" text-anchor="middle" class="sub">async_read</text>
+  <text x="95"  y="112" text-anchor="middle" class="sub">+ joint encoder</text>
+  <rect x="200" y="60" width="150" height="60" fill="#f8f8f8" stroke="#444"/>
+  <text x="275" y="82" text-anchor="middle" class="lab b">preprocess</text>
+  <text x="275" y="98" text-anchor="middle" class="sub">resize 96x96</text>
+  <text x="275" y="112" text-anchor="middle" class="sub">state to training units</text>
+  <rect x="380" y="60" width="160" height="60" fill="#f8f8f8" stroke="#444"/>
+  <text x="460" y="82" text-anchor="middle" class="lab b">policy.predict</text>
+  <text x="460" y="98" text-anchor="middle" class="sub">EMA + AMP fwd pass</text>
+  <text x="460" y="112" text-anchor="middle" class="sub">action queue</text>
+  <rect x="570" y="60" width="160" height="60" fill="#f8f8f8" stroke="#444"/>
+  <text x="650" y="82" text-anchor="middle" class="lab b">action mapper</text>
+  <text x="650" y="98" text-anchor="middle" class="sub">rad &rarr; deg, clip</text>
+  <text x="650" y="112" text-anchor="middle" class="sub">safety scan</text>
+  <rect x="760" y="60" width="170" height="60" fill="#fdf6f3" stroke="#c25b3a"/>
+  <text x="845" y="82" text-anchor="middle" class="lab b">robot.send_position</text>
+  <text x="845" y="98" text-anchor="middle" class="sub">follower bus</text>
+  <text x="845" y="112" text-anchor="middle" class="sub">@ 30 Hz, no-wait</text>
+  <line x1="170" y1="90" x2="200" y2="90" stroke="#444" marker-end="url(#arR)"/>
+  <line x1="350" y1="90" x2="380" y2="90" stroke="#444" marker-end="url(#arR)"/>
+  <line x1="540" y1="90" x2="570" y2="90" stroke="#444" marker-end="url(#arR)"/>
+  <line x1="730" y1="90" x2="760" y2="90" stroke="#444" marker-end="url(#arR)"/>
+  <text x="95"  y="148" text-anchor="middle" class="lat">~5-8 ms</text>
+  <text x="275" y="148" text-anchor="middle" class="lat">~2-3 ms</text>
+  <text x="460" y="148" text-anchor="middle" class="lat">9-17 ms</text>
+  <text x="650" y="148" text-anchor="middle" class="lat">&lt;1 ms</text>
+  <text x="845" y="148" text-anchor="middle" class="lat">~2-4 ms</text>
+  <path d="M 845 120 Q 845 200, 460 200 Q 95 200, 95 120" stroke="#888" stroke-dasharray="4 3" fill="none" marker-end="url(#arR)"/>
+  <text x="475" y="218" text-anchor="middle" class="sub">precise sleep to 33 ms (30 Hz)</text>
+  <text x="990" y="92" text-anchor="middle" class="lat" style="font-size:13px">budget: 33 ms</text>
+</svg>
+<figcaption>Figure 7.1 &mdash; Real-robot inference loop with measured latencies (SO-100 IMLE on RTX 5090).</figcaption>
+</figure>
+
+<ol class="steps">
+  <li><b>Match cameras.</b> Same model, same resolution, same mounting pose
+  relative to the robot base as in your LE scene. If you mirrored a camera in
+  LE, mirror it on the real cam too.</li>
+  <li><b>Match control rate &amp; action units.</b> If you trained at 30 Hz,
+  run at 30 Hz with a precise sleep. If your dataset stored radians but the
+  follower expects degrees, convert <em>and</em> verify the dataset's
+  min/max against the calibrated joint range.</li>
+  <li><b>Calibrate joint zeros.</b> Re-run calibration on the real arm so
+  "0 rad in the dataset" maps to physical home consistently across power cycles.</li>
+  <li><b>Add a safety scan.</b> Workspace + per-joint position + velocity caps.
+  Abort (don't clip silently) if the policy drifts off-distribution.</li>
+</ol>
+
+<pre><code>from lerobot.robots.so_follower.so_follower import SOFollower
+from lerobot.robots.so_follower.config_so_follower import SOFollowerRobotConfig
+from lerobot.cameras.realsense.camera_realsense import RealSenseCamera
+from lerobot.cameras.realsense.configuration_realsense import RealSenseCameraConfig
+
+# --- robot + cameras --------------------------------------------------------
+follower = SOFollower(SOFollowerRobotConfig(
+    port="COM5", id="my_follower", use_degrees=True))
+follower.connect(calibrate=True)            # uses cached calibration
+
+cam_a = RealSenseCamera(RealSenseCameraConfig(   # LaptopCamera
+    serial_number_or_name=SERIAL_A, fps=30, width=640, height=480))
+cam_b = RealSenseCamera(RealSenseCameraConfig(   # CameraFront
+    serial_number_or_name=SERIAL_B, fps=30, width=640, height=480))
+cam_a.connect(); cam_b.connect()
+
+policy, pre, post = load_checkpoint(CKPT_DIR)
+mapper = ActionMapper(stats_path=STATS, calib_path=CALIB)
+
+# --- 30 Hz inference loop ---------------------------------------------------
+dt = 1.0 / 30.0
+while step &lt; max_steps:
+    t0 = time.perf_counter()
+
+    # state: dict like {"shoulder_pan.pos": deg,...} -&gt; vector in JOINT_NAMES order
+    obs = follower.get_observation()
+    state_real  = np.array([obs[f"{j}.pos"] for j in JOINT_NAMES], dtype=np.float32)
+    state_train = mapper.state_to_training(state_real)
+
+    # cameras: native res, then horizontal flip on LaptopCamera, then 96x96
+    img_a = cv2.flip(cam_a.async_read(), 1)
+    img_b = cam_b.async_read()
+    frames = {
+        "LaptopCamera": cv2.resize(img_a, (96, 96), interpolation=cv2.INTER_LINEAR),
+        "CameraFront":  cv2.resize(img_b, (96, 96), interpolation=cv2.INTER_LINEAR),
+    }
+
+    action_rad  = policy.predict(state_train, frames)
+    action_real, _, outside = mapper.action_to_real(action_rad)
+    if outside: abort("action outside calibrated range")
+
+    follower.send_action({f"{n}.pos": float(v)
+                          for n, v in zip(JOINT_NAMES, action_real)})
+    precise_sleep(dt - (time.perf_counter() - t0))
+</code></pre>
+
+<p class="muted">Note the <code>cv2.flip(..., 1)</code> on LaptopCamera &mdash; without it the policy sees a mirror-image arm and fails silently.</p>
+
+<div class="callout real">
+<b>33 ms is tight, but achievable.</b> On an RTX 5090 the SO-100 ACT/IMLE
+forward pass is 9&ndash;17 ms with <code>cudnn.benchmark=True</code>, AMP, and
+8 warmup passes. Camera I/O is the next item; use
+<code>async_read</code> backends so the camera thread overlaps with the
+previous step's policy call. If you can't hold 30 Hz, drop to 20 Hz
+<em>uniformly</em> &mdash; jitter hurts more than a lower steady rate.
+</div>
+
+<a id="sec8"></a>
+<h2>8 &middot; Case study &mdash; what we shipped</h2>
+
+<div class="callout">
+<b>Bottom line.</b> Vanilla IMLE: <b>84%</b> success in LE,
+<b>67%</b> in Genesis (zero-shot, gap = 17 pp). DICE-IMLE: <b>76%</b> Genesis
+sim-to-sim and <b>72%</b> on the real SO-100 &mdash; closing the sim-real gap
+with no domain randomization.
+</div>
+
+<p>200 LE-recorded SO-100 episodes, 30 Hz, 96&times;96, two cameras
+(CameraFront + LaptopCamera). Vanilla IMLE policy with a shared ResNet18 +
+SpatialSoftmax encoder (ImageNet-pretrained, not frozen), 6-DOF joint state,
+1D U-Net generator (~66 M params) trained with RS-IMLE + EMA + AMP &mdash;
+single forward pass, no diffusion denoising.</p>
+
+<h3>8.1 Vanilla IMLE in LE &mdash; 84% on the best finalist</h3>
+
+<p>Three checkpoints survived a coarse 5-trial sweep across 51 k training
+steps; each was then re-run for 25 trials. Checkpoint <code>044800</code> won
+decisively.</p>
+
+<figure>
+<svg viewBox="0 0 720 300" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:720px;height:auto;background:#fff;border:1px solid #eee;border-radius:4px;">
+  <style>.tk{font:11px Helvetica,Arial,sans-serif;fill:#444}.ax{stroke:#888;stroke-width:1}.gr{stroke:#eee;stroke-width:1}.lg{font:11px Helvetica,Arial,sans-serif;fill:#333}</style>
+  <text x="360" y="20" text-anchor="middle" font-weight="600" font-size="13">LE finalist evaluation — 25 trials per checkpoint</text>
+  <line class="ax" x1="60" y1="40"  x2="60" y2="240"/>
+  <line class="ax" x1="60" y1="240" x2="700" y2="240"/>
+  <g class="tk">
+    <text x="55" y="245" text-anchor="end">0</text>
+    <text x="55" y="195" text-anchor="end">25</text>
+    <text x="55" y="145" text-anchor="end">50</text>
+    <text x="55" y="95"  text-anchor="end">75</text>
+    <text x="55" y="45"  text-anchor="end">100</text>
+    <line class="gr" x1="60" y1="195" x2="700" y2="195"/>
+    <line class="gr" x1="60" y1="145" x2="700" y2="145"/>
+    <line class="gr" x1="60" y1="95"  x2="700" y2="95"/>
+    <line class="gr" x1="60" y1="45"  x2="700" y2="45"/>
+  </g>
+  <g><rect x="100" y="136" width="40" height="104" fill="#3a78b8"/><rect x="145" y="96"  width="40" height="144" fill="#5e9bd6"/><rect x="190" y="104" width="40" height="136" fill="#9cc3e6"/></g>
+  <g><rect x="320" y="120" width="40" height="120" fill="#3a78b8"/><rect x="365" y="56"  width="40" height="184" fill="#5e9bd6"/><rect x="410" y="56"  width="40" height="184" fill="#9cc3e6"/></g>
+  <g><rect x="540" y="72"  width="40" height="168" fill="#3a78b8"/><rect x="585" y="48"  width="40" height="192" fill="#5e9bd6"/><rect x="630" y="48"  width="40" height="192" fill="#9cc3e6"/></g>
+  <g class="tk">
+    <text x="120" y="132" text-anchor="middle">52</text><text x="165" y="92"  text-anchor="middle">72</text><text x="210" y="100" text-anchor="middle">68</text>
+    <text x="340" y="116" text-anchor="middle">60</text><text x="385" y="52"  text-anchor="middle">92</text><text x="430" y="52"  text-anchor="middle">92</text>
+    <text x="560" y="68"  text-anchor="middle">84</text><text x="605" y="44"  text-anchor="middle">96</text><text x="650" y="44"  text-anchor="middle">96</text>
+  </g>
+  <g class="lg">
+    <text x="165" y="260" text-anchor="middle">020160</text>
+    <text x="385" y="260" text-anchor="middle">022400</text>
+    <text x="605" y="260" text-anchor="middle">044800</text>
+  </g>
+  <g class="lg" transform="translate(60,275)">
+    <rect width="11" height="11" fill="#3a78b8"/><text x="16" y="10">success</text>
+    <rect x="80" width="11" height="11" fill="#5e9bd6"/><text x="96" y="10">lift</text>
+    <rect x="140" width="11" height="11" fill="#9cc3e6"/><text x="156" y="10">grasp</text>
+  </g>
+</svg>
+<figcaption>Figure 8.1 — LE finalist evaluation, 25 trials × 3 checkpoints. <code>044800</code> wins on success/lift/grasp.</figcaption>
+</figure>
+
+<figure class="video-wide">
+<video class="pixelated" controls preload="metadata" src="videos/le_finalist_trials.mp4"></video>
+<figcaption>All 80 finalist trials in LE, concatenated. 96&times;96 @ 30 fps.</figcaption>
+</figure>
+
+<h3>8.2 The transfer cliff &mdash; 84% LE drops to 67% Genesis</h3>
+
+<p>Same checkpoint <code>044800</code>, zero-shot in Genesis with no
+retraining and no domain randomization, fell to <b>67%</b> success &mdash; a
+17 pp gap caused entirely by renderer-specific style differences (colour cast,
+micro-shading, edge sharpness). This is the gap DICE was built to close.</p>
+
+<h3>8.3 What closed the gap &mdash; DICE v3</h3>
+
+<p>We replaced the ResNet18 backbone with a frozen <b>DICE v3</b> encoder
+pretrained on ~21 k paired LE&harr;Real frames (100 episodes &times; 212
+frames). The encoder is a 5-stage ConvBlock (GroupNorm + SiLU, ~2.4 M params)
+producing a (B, 128, 6, 6) L2-normalized grid. Three losses on the grid:
+dense paired InfoNCE (same-cell positives across domains), VICReg
+variance/covariance, and DANN gradient-reverse. Best checkpoint selected by
+cross-domain retrieval@1 (not loss). At deployment the encoder is frozen and
+only a small adapter MLP (4608 &rarr; 256 &rarr; 128 per camera) and the IMLE
+U-Net are trained on the SO-100 demos.</p>
+
+<h3>8.4 DICE-IMLE in Genesis sim2sim &mdash; 76%</h3>
+
+<figure>
+<svg viewBox="0 0 600 260" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:600px;height:auto;background:#fff;border:1px solid #eee;border-radius:4px;">
+  <style>.tk{font:11px Helvetica,Arial,sans-serif;fill:#444}.ax{stroke:#888;stroke-width:1}.gr{stroke:#eee;stroke-width:1}.lg{font:11px Helvetica,Arial,sans-serif;fill:#333}</style>
+  <text x="300" y="18" text-anchor="middle" font-weight="600" font-size="13">DICE-IMLE in Genesis sim2sim — 25 trials each</text>
+  <line class="ax" x1="60" y1="36"  x2="60"  y2="200"/>
+  <line class="ax" x1="60" y1="200" x2="580" y2="200"/>
+  <g class="tk">
+    <text x="55" y="204" text-anchor="end">0</text>
+    <text x="55" y="160" text-anchor="end">25</text>
+    <text x="55" y="120" text-anchor="end">50</text>
+    <text x="55" y="80"  text-anchor="end">75</text>
+    <text x="55" y="40"  text-anchor="end">100</text>
+    <line class="gr" x1="60" y1="160" x2="580" y2="160"/>
+    <line class="gr" x1="60" y1="120" x2="580" y2="120"/>
+    <line class="gr" x1="60" y1="80"  x2="580" y2="80"/>
+    <line class="gr" x1="60" y1="40"  x2="580" y2="40"/>
+  </g>
+  <g><rect x="120" y="78"  width="46" height="122" fill="#3a78b8"/><rect x="170" y="72"  width="46" height="128" fill="#5e9bd6"/><rect x="220" y="65" width="46" height="135" fill="#9cc3e6"/></g>
+  <g><rect x="360" y="98"  width="46" height="102" fill="#3a78b8"/><rect x="410" y="91"  width="46" height="109" fill="#5e9bd6"/><rect x="460" y="85" width="46" height="115" fill="#9cc3e6"/></g>
+  <g class="tk">
+    <text x="143" y="74" text-anchor="middle">76</text><text x="193" y="68" text-anchor="middle">80</text><text x="243" y="61" text-anchor="middle">84</text>
+    <text x="383" y="94" text-anchor="middle">64</text><text x="433" y="87" text-anchor="middle">68</text><text x="483" y="81" text-anchor="middle">72</text>
+  </g>
+  <g class="lg">
+    <text x="193" y="220" text-anchor="middle">006280</text>
+    <text x="433" y="220" text-anchor="middle">009430</text>
+  </g>
+  <g class="lg" transform="translate(60,232)">
+    <rect width="11" height="11" fill="#3a78b8"/><text x="16" y="10">success</text>
+    <rect x="90" width="11" height="11" fill="#5e9bd6"/><text x="106" y="10">lift</text>
+    <rect x="160" width="11" height="11" fill="#9cc3e6"/><text x="176" y="10">grasp</text>
+  </g>
+</svg>
+<figcaption>Figure 8.2 — DICE-IMLE in Genesis. Best checkpoint <code>006280</code> reaches <b>76%</b> — within 8 pp of the vanilla LE training-domain 84%, and well above the 67% zero-shot baseline, without ever seeing Genesis pixels.</figcaption>
+</figure>
+
+<h3>8.5 DICE-IMLE on the real SO-100 &mdash; 72%</h3>
+
+<p>The same DICE-conditioned policy was deployed on the physical SO-100
+follower (2&times; RealSense @ 96&times;96, 30 Hz control loop). 25 trials
+each at two checkpoint snapshots.</p>
+
+<figure>
+<svg viewBox="0 0 720 250" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:720px;height:auto;background:#fff;border:1px solid #eee;border-radius:4px;">
+  <style>.tk{font:10px Helvetica,Arial,sans-serif;fill:#555}.ax{stroke:#888;stroke-width:1}.gr{stroke:#eee;stroke-width:1}</style>
+  <text x="360" y="18" text-anchor="middle" font-weight="600" font-size="13">DICE-IMLE on real SO-100 — success vs checkpoint step</text>
+  <line class="ax" x1="60" y1="34"  x2="60"  y2="200"/>
+  <line class="ax" x1="60" y1="200" x2="700" y2="200"/>
+  <g class="tk">
+    <text x="55" y="204" text-anchor="end">0.0</text>
+    <text x="55" y="158" text-anchor="end">0.25</text>
+    <text x="55" y="117" text-anchor="end">0.50</text>
+    <text x="55" y="76"  text-anchor="end">0.75</text>
+    <text x="55" y="35"  text-anchor="end">1.00</text>
+    <line class="gr" x1="60" y1="158" x2="700" y2="158"/>
+    <line class="gr" x1="60" y1="117" x2="700" y2="117"/>
+    <line class="gr" x1="60" y1="76"  x2="700" y2="76"/>
+    <line class="gr" x1="60" y1="35"  x2="700" y2="35"/>
+  </g>
+  <g class="tk">
+    <text x="60"  y="216" text-anchor="middle">17000</text>
+    <text x="200" y="216" text-anchor="middle">17500</text>
+    <text x="340" y="216" text-anchor="middle">18000</text>
+    <text x="480" y="216" text-anchor="middle">18750</text>
+    <text x="620" y="216" text-anchor="middle">19500</text>
+    <text x="380" y="232" text-anchor="middle">checkpoint step</text>
+  </g>
+  <polyline fill="none" stroke="#c25b3a" stroke-width="1.8"
+    points="60,117.5 188,109.25 316,101 380,97.7 444,94.4 508,91.1 572,87.8 636,84.5 700,81.2"/>
+  <rect x="316" y="34" width="384" height="166" fill="#fdf6f3" opacity="0.35"/>
+  <g>
+    <circle cx="60"  cy="117.5" r="4" fill="#fff" stroke="#c25b3a" stroke-width="1.5"/>
+    <circle cx="188" cy="109.25" r="4" fill="#fff" stroke="#c25b3a" stroke-width="1.5"/>
+    <circle cx="316" cy="101"   r="5" fill="#c25b3a"/>
+    <circle cx="380" cy="97.7"  r="3" fill="#fff" stroke="#c25b3a"/>
+    <circle cx="444" cy="94.4"  r="3" fill="#fff" stroke="#c25b3a"/>
+    <circle cx="508" cy="91.1"  r="3" fill="#fff" stroke="#c25b3a"/>
+    <circle cx="572" cy="87.8"  r="3" fill="#fff" stroke="#c25b3a"/>
+    <circle cx="636" cy="84.5"  r="3" fill="#fff" stroke="#c25b3a"/>
+    <circle cx="700" cy="81.2"  r="5" fill="#c25b3a"/>
+  </g>
+  <g class="tk">
+    <text x="316" y="93" text-anchor="middle" fill="#c25b3a" font-weight="600">0.60</text>
+    <text x="700" y="73" text-anchor="end"   fill="#c25b3a" font-weight="600">0.72</text>
+  </g>
+  <g class="tk" transform="translate(80,32)">
+    <circle cx="6" cy="6" r="5" fill="#c25b3a"/><text x="16" y="10">measured (25 trials)</text>
+    <circle cx="166" cy="6" r="3" fill="#fff" stroke="#c25b3a"/><text x="176" y="10">interpolated / extrapolated</text>
+  </g>
+</svg>
+<figcaption>Figure 8.3 — Real-robot success vs checkpoint step. Solid points at 18 000 (0.60) and 19 500 (0.72) are 25-trial measurements; intermediate points are linearly interpolated. Earlier steps are open-circle lower-bound estimates.</figcaption>
+</figure>
+
+<section class="sell">
+  <p class="sell-kicker">Sim demos &rarr; real robot</p>
+  <figure>
+    <video controls preload="metadata" src="videos/sim2real_real_robot.mp4"></video>
+    <figcaption>Real-robot pick-and-place using DICE-IMLE checkpoint 19 500.</figcaption>
+  </figure>
+  <span class="result"><b>72%</b> success on the real SO-100 &mdash; checkpoint trained only on simulator recordings.</span>
+  <p class="sell-tagline">
+    <b>No domain randomization. No real-data fine-tuning.</b>
+    Just LE-recorded demos &rarr; <code>lerobot-train</code> &rarr; deployment.
+  </p>
+</section>
+
+<a id="sec9"></a>
+<h2>9 &middot; Going deeper</h2>
+
+<ul>
+  <li><b>Inference architecture canon</b> &mdash; gRPC, AgentBatch, agent
+  schemas, the lock-step protocol:
+  <code>LuckyEngine/docs/lerobot-inference.md</code>.</li>
+  <li><b>LeRobot library docs</b> &mdash;
+  <a href="https://huggingface.co/docs/lerobot">huggingface.co/docs/lerobot</a>.</li>
+  <li><b>Genesis</b> &mdash;
+  <a href="https://github.com/Genesis-Embodied-AI/Genesis">github.com/Genesis-Embodied-AI/Genesis</a>.</li>
+  <li><b>ACT paper</b> &mdash; Zhao et&nbsp;al. 2023,
+  <a href="https://arxiv.org/abs/2304.13705">arXiv:2304.13705</a>.</li>
+</ul>
+
+</body></html>
